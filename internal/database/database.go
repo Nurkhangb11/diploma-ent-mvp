@@ -20,12 +20,22 @@ func InitDB() {
 	log.Println("Database connected successfully")
 
 	// Auto migrate
-	err = DB.AutoMigrate(&models.User{}, &models.Question{}, &models.Attempt{})
+	err = DB.AutoMigrate(
+		&models.User{},
+		&models.Subject{},
+		&models.Section{},
+		&models.Subtopic{},
+		&models.Question{},
+		&models.Attempt{},
+	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
 	log.Println("Database migrated successfully")
+
+	// Seed subject structure first (before questions)
+	SeedSubjectStructure()
 
 	// Seed questions if table is empty
 	SeedQuestions()

@@ -12,6 +12,7 @@ func SetupQuestionsRoutes(r *gin.Engine) {
 		api.GET("/questions", handlers.GetRandomQuestion)
 		api.POST("/answer", handlers.SubmitAnswer)
 		api.GET("/progress/:user_id", handlers.GetProgress)
+		api.GET("/prediction/:user_id", handlers.GetPrediction)
 	}
 }
 

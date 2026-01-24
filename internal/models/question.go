@@ -8,5 +8,7 @@ type Question struct {
 	Options       string `gorm:"type:text" json:"options"` // JSON массив
 	CorrectAnswer string `gorm:"not null" json:"correct_answer"`
 	Explanation   string `gorm:"type:text" json:"explanation"`
-}
+	SubtopicID    *uint  `gorm:"index" json:"subtopic_id"` // NULLABLE
 
+	Subtopic Subtopic `gorm:"foreignKey:SubtopicID" json:"-"`
+}
