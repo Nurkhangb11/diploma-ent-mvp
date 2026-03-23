@@ -4,6 +4,7 @@ import (
 	"diploma-ent-mvp/internal/database"
 	"diploma-ent-mvp/internal/models"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -33,11 +34,20 @@ func GetProgress(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists
+	// Check if user exists, create if not
 	var user models.User
 	if err := database.DB.First(&user, uint(userID)).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
+		// User doesn't exist, create a new one with unique email
+		user = models.User{
+			ID:          uint(userID),
+			Name:        "User",
+			Email:       fmt.Sprintf("user%d@example.com", userID),
+			TargetScore: 0,
+		}
+		if err := database.DB.Create(&user).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+			return
+		}
 	}
 
 	// Get all attempts for user

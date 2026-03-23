@@ -12,7 +12,7 @@ function Home() {
             Интеллектуальная платформа для подготовки к Единому Национальному Тестированию.
             Проверьте свои знания и отслеживайте прогресс.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link
               to="/test"
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 text-center"
@@ -24,6 +24,12 @@ function Home() {
               className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 text-center"
             >
               Посмотреть прогресс
+            </Link>
+            <Link
+              to="/prediction"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 text-center"
+            >
+              Прогноз баллов
             </Link>
           </div>
         </div>

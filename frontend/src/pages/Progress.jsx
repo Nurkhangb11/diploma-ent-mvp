@@ -1,19 +1,25 @@
 import { useState, useEffect } from 'react'
-
-const USER_ID = 1 // ID пользователя Nurkhan
+import { useUser } from '../context/UserContext'
+import { useNavigate } from 'react-router-dom'
 
 function Progress() {
+  const { userId } = useUser()
+  const navigate = useNavigate()
   const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!userId) {
+      navigate('/login')
+      return
+    }
     fetchProgress()
-  }, [])
+  }, [userId, navigate])
 
   const fetchProgress = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/progress/${USER_ID}`)
+      const response = await fetch(`/api/progress/${userId}`)
       const data = await response.json()
       setProgress(data)
     } catch (error) {
@@ -144,5 +150,4 @@ function Progress() {
 }
 
 export default Progress
-
 

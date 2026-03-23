@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-
-const USER_ID = 1 // ID пользователя Nurkhan
+import { useUser } from '../context/UserContext'
+import { useNavigate } from 'react-router-dom'
 
 function Test() {
+  const { userId } = useUser()
+  const navigate = useNavigate()
   const [question, setQuestion] = useState(null)
   const [selectedAnswer, setSelectedAnswer] = useState('')
   const [result, setResult] = useState(null)
@@ -11,8 +13,12 @@ function Test() {
   const [options, setOptions] = useState([])
 
   useEffect(() => {
+    if (!userId) {
+      navigate('/login')
+      return
+    }
     fetchQuestion()
-  }, [])
+  }, [userId, navigate])
 
   const fetchQuestion = async () => {
     setLoading(true)
@@ -62,7 +68,7 @@ function Test() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: USER_ID,
+          user_id: userId,
           question_id: question.id,
           user_answer: selectedAnswer,
         }),
