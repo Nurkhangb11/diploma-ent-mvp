@@ -30,3 +30,4 @@ func GetPrediction(c *gin.Context) {
 }
 
 
+

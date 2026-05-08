@@ -5,6 +5,7 @@ import { useUser } from '../context/UserContext'
 function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -16,23 +17,25 @@ function Register() {
     setLoading(true)
 
     try {
-      // Для MVP: создаем пользователя через простой API или используем существующего
-      // Поскольку backend не имеет API регистрации, создадим простую логику
-      // В реальном приложении здесь был бы POST /api/users
-      
-      // Проверяем, существует ли пользователь с таким email
-      // Для MVP просто создаем нового пользователя локально
-      // В реальности нужен backend endpoint POST /api/users
-      
-      // Временное решение: генерируем ID и сохраняем в localStorage
-      // В реальном приложении это должно быть через API
-      const newUserId = Date.now() % 1000000 // Простой способ получить уникальный ID
-      
-      // Сохраняем пользователя
-      login(newUserId, name)
-      
-      // Перенаправляем на главную
-      navigate('/')
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Registration failed')
+      }
+
+      login(data.token, data.user)
+      navigate('/profile')
     } catch (err) {
       setError('Ошибка при регистрации. Попробуйте еще раз.')
       console.error('Registration error:', err)
@@ -85,6 +88,21 @@ function Register() {
             />
           </div>
 
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              Пароль
+            </label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Придумайте пароль"
+            />
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -108,5 +126,6 @@ function Register() {
 }
 
 export default Register
+
 
 

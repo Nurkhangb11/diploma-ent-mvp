@@ -3,19 +3,21 @@ import { useUser } from '../context/UserContext'
 import { useNavigate } from 'react-router-dom'
 
 function Prediction() {
-  const { userId, userName } = useUser()
+  const { userId, userName, authLoading } = useUser()
   const navigate = useNavigate()
   const [prediction, setPrediction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [subjectName, setSubjectName] = useState('История Казахстана')
 
   useEffect(() => {
+    if (authLoading) return
     if (!userId) {
       navigate('/login')
       return
     }
     fetchPrediction()
-  }, [userId, navigate])
+  }, [authLoading, userId, navigate])
 
   const fetchPrediction = async () => {
     if (!userId) return
@@ -23,7 +25,9 @@ function Prediction() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch(`/api/prediction/${userId}?subject=История Казахстана`)
+      const response = await fetch(
+        `/api/prediction/${userId}?subject=${encodeURIComponent(subjectName)}`
+      )
       if (!response.ok) {
         throw new Error('Failed to fetch prediction')
       }
@@ -89,43 +93,58 @@ function Prediction() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Прогноз баллов</h1>
-        {userName && (
-          <p className="text-gray-600">Пользователь: {userName}</p>
-        )}
+      <div className="mb-6 flex flex-col gap-3">
+        {userName && <p className="text-slate-600">Пользователь: {userName}</p>}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={subjectName}
+            onChange={(e) => setSubjectName(e.target.value)}
+            className="rounded-xl border border-[#d8d2ea] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+          >
+            <option value="История Казахстана">История Казахстана</option>
+            <option value="Математическая грамотность">Математическая грамотность</option>
+            <option value="Грамотность чтения">Грамотность чтения</option>
+          </select>
+          <button
+            onClick={fetchPrediction}
+            className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-105"
+          >
+            Показать
+          </button>
+        </div>
       </div>
 
       {/* Основной прогноз */}
-      <div className="bg-white rounded-lg shadow-lg p-6 md:p-8 mb-6">
+      <div className="mb-6 rounded-2xl border border-[#e4deef] bg-white p-6 shadow-sm md:p-8">
         <div className="text-center mb-6">
-          <div className="text-5xl font-bold text-blue-600 mb-2">
+          <div className="mb-2 text-6xl font-extrabold text-violet-700">
             {prediction.predicted_score.toFixed(1)}
           </div>
-          <div className="text-gray-600 text-lg">из 20 баллов</div>
+          <div className="text-lg text-slate-600">из 20 баллов</div>
         </div>
 
         {/* Уровень доверия */}
-        <div className={`mb-4 p-4 rounded-lg border-2 ${getConfidenceColor(prediction.confidence_level)}`}>
+        <div className={`mb-4 rounded-xl border-2 p-4 ${getConfidenceColor(prediction.confidence_level)}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold">Уровень доверия:</span>
             <span className="font-bold">{getConfidenceText(prediction.confidence_level)}</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+          <div className="mb-2 h-2.5 w-full rounded-full bg-gray-200">
             <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              className="h-2.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 transition-all duration-300"
               style={{ width: `${prediction.confidence * 100}%` }}
-            ></div>
+            />
           </div>
-          <div className="text-sm">
+          <div className="text-sm font-medium">
             Доверие: {(prediction.confidence * 100).toFixed(0)}%
           </div>
         </div>
 
         {/* Сообщение */}
         {prediction.message && (
-          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">{prediction.message}</p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm text-slate-700">{prediction.message}</p>
           </div>
         )}
       </div>
@@ -133,10 +152,10 @@ function Prediction() {
       {/* Баллы по темам */}
       {prediction.section_scores && prediction.section_scores.length > 0 && (
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Баллы по темам</h2>
+          <h2 className="mb-4 text-4xl font-bold text-slate-900">Баллы по темам</h2>
           <div className="space-y-4">
             {prediction.section_scores.map((section, index) => (
-              <div key={index} className="bg-white rounded-lg shadow-lg p-6">
+              <div key={index} className="rounded-2xl border border-[#e4deef] bg-white p-6 shadow-sm">
                 <div className="mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
                     {section.section_name}
@@ -149,15 +168,15 @@ function Prediction() {
                       Вес темы: {section.weight} баллов
                     </span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                  <div className="mb-2 h-3 w-full rounded-full bg-gray-200">
                     <div
-                      className="bg-green-600 h-3 rounded-full transition-all duration-300"
+                      className="h-3 rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 transition-all duration-300"
                       style={{ width: `${section.mastery * 100}%` }}
-                    ></div>
+                    />
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-600">Балл за тему:</span>
-                    <span className="text-xl font-bold text-green-600">
+                    <span className="text-xl font-bold text-violet-700">
                       {section.score.toFixed(1)} / {section.weight}
                     </span>
                   </div>
@@ -172,7 +191,7 @@ function Prediction() {
       <div className="mt-6 text-center">
         <button
           onClick={fetchPrediction}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
+          className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-8 py-3 font-semibold text-white shadow-md transition hover:brightness-105"
         >
           Обновить прогноз
         </button>
@@ -182,5 +201,6 @@ function Prediction() {
 }
 
 export default Prediction
+
 
 

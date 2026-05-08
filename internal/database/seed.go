@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type QuestionJSON struct {
@@ -94,10 +96,22 @@ func SeedUsers() {
 	}
 
 	// Create user
+	seedPassword := os.Getenv("SEED_USER_PASSWORD")
+	if seedPassword == "" {
+		seedPassword = "12345678"
+	}
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(seedPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("Failed to hash seed user password: %v", err)
+		return
+	}
+
 	user := models.User{
-		Name:        "Nurkhan",
-		Email:       "nurkhan@example.com",
-		TargetScore: 120,
+		Name:         "Nurkhan",
+		Email:        "nurkhan@example.com",
+		TargetScore:  120,
+		PasswordHash: string(passwordHash),
+		Avatar:       "",
 	}
 
 	if err := DB.Create(&user).Error; err != nil {

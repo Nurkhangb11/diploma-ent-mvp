@@ -12,17 +12,18 @@ import (
 )
 
 type WrongQuestion struct {
-	QuestionID   uint     `json:"question_id"`
-	QuestionText string   `json:"question_text"`
-	Options      []string `json:"options"`
-	CorrectAnswer string  `json:"correct_answer"`
-	Explanation  string   `json:"explanation"`
+	QuestionID    uint     `json:"question_id"`
+	QuestionText  string   `json:"question_text"`
+	Topic         string   `json:"topic"`
+	Options       []string `json:"options"`
+	CorrectAnswer string   `json:"correct_answer"`
+	Explanation   string   `json:"explanation"`
 }
 
 type ProgressResponse struct {
-	TotalQuestions int            `json:"total_questions"`
-	CorrectAnswers int            `json:"correct_answers"`
-	Percentage     float64        `json:"percentage"`
+	TotalQuestions int             `json:"total_questions"`
+	CorrectAnswers int             `json:"correct_answers"`
+	Percentage     float64         `json:"percentage"`
 	WrongQuestions []WrongQuestion `json:"wrong_questions"`
 }
 
@@ -76,11 +77,12 @@ func GetProgress(c *gin.Context) {
 				}
 
 				wrongQuestion := WrongQuestion{
-					QuestionID:   question.ID,
-					QuestionText: question.QuestionText,
-					Options:      options,
+					QuestionID:    question.ID,
+					QuestionText:  question.QuestionText,
+					Topic:         question.Topic,
+					Options:       options,
 					CorrectAnswer: question.CorrectAnswer,
-					Explanation:  question.Explanation,
+					Explanation:   question.Explanation,
 				}
 				wrongQuestions = append(wrongQuestions, wrongQuestion)
 			}

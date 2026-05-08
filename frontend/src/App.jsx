@@ -7,6 +7,8 @@ import Register from './pages/Register'
 import Login from './pages/Login'
 import Prediction from './pages/Prediction'
 import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
+import Profile from './pages/Profile'
 
 function App() {
   return (
@@ -17,9 +19,38 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/test" element={<Test />} />
-            <Route path="/progress" element={<Progress />} />
-            <Route path="/prediction" element={<Prediction />} />
+            <Route
+              path="/test"
+              element={
+                <ProtectedRoute>
+                  <Test />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/progress"
+              element={
+                <ProtectedRoute>
+                  <Progress />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/prediction"
+              element={
+                <ProtectedRoute>
+                  <Prediction />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Layout>
       </Router>

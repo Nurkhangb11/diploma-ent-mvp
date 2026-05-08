@@ -1,39 +1,76 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
 const UserContext = createContext()
 
 export function UserProvider({ children }) {
-  const [userId, setUserId] = useState(null)
-  const [userName, setUserName] = useState(null)
+  const [token, setToken] = useState(() => localStorage.getItem('token'))
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  const fetchMe = useCallback(async () => {
+    if (!token) return null
+
+    const response = await fetch('/api/auth/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (!response.ok) return null
+    const data = await response.json()
+    return data.user
+  }, [token])
 
   useEffect(() => {
-    // Загрузить user_id из localStorage при загрузке
-    const savedUserId = localStorage.getItem('user_id')
-    const savedUserName = localStorage.getItem('user_name')
-    if (savedUserId) {
-      setUserId(parseInt(savedUserId))
-    }
-    if (savedUserName) {
-      setUserName(savedUserName)
-    }
-  }, [])
+    let mounted = true
 
-  const login = (id, name) => {
-    setUserId(id)
-    setUserName(name)
-    localStorage.setItem('user_id', id.toString())
-    localStorage.setItem('user_name', name)
+    const run = async () => {
+      try {
+        if (!token) {
+          if (mounted) setUser(null)
+          return
+        }
+        const me = await fetchMe()
+        if (mounted) setUser(me)
+      } catch (e) {
+        // ignore
+      } finally {
+        if (mounted) setAuthLoading(false)
+      }
+    }
+
+    run()
+    return () => {
+      mounted = false
+    }
+  }, [token, fetchMe])
+
+  const login = (nextToken, nextUser) => {
+    setToken(nextToken)
+    localStorage.setItem('token', nextToken)
+    if (nextUser) setUser(nextUser)
   }
 
   const logout = () => {
-    setUserId(null)
-    setUserName(null)
-    localStorage.removeItem('user_id')
-    localStorage.removeItem('user_name')
+    setToken(null)
+    setUser(null)
+    localStorage.removeItem('token')
   }
 
   return (
-    <UserContext.Provider value={{ userId, userName, login, logout }}>
+    <UserContext.Provider
+      value={{
+        token,
+        user,
+        userId: user?.id ?? null,
+        userName: user?.name ?? null,
+        avatar: user?.avatar ?? null,
+        targetScore: user?.target_score ?? null,
+        authLoading,
+        login,
+        logout,
+      }}
+    >
       {children}
     </UserContext.Provider>
   )
@@ -46,5 +83,6 @@ export function useUser() {
   }
   return context
 }
+
 
 

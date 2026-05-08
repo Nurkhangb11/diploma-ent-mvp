@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 
 function Login() {
-  const [identifier, setIdentifier] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -15,29 +17,28 @@ function Login() {
     setLoading(true)
 
     try {
-      // Для MVP: ищем пользователя по имени или email
-      // В реальном приложении здесь был бы POST /api/auth/login
-      
-      // Проверяем, существует ли пользователь с таким именем/email
-      // Для MVP используем простую логику
-      // В реальности нужен backend endpoint GET /api/users?email=... или POST /api/auth/login
-      
-      // Временное решение: для MVP используем существующего пользователя или создаем нового
-      // Если введено "Nurkhan" или "nurkhan@example.com", используем ID=1
-      let userId = null
-      let userName = null
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      })
 
-      if (identifier.toLowerCase() === 'nurkhan' || identifier.toLowerCase() === 'nurkhan@example.com') {
-        userId = 1
-        userName = 'Nurkhan'
-      } else {
-        // Для других пользователей создаем новый ID
-        userId = Math.abs(identifier.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 1000000
-        userName = identifier.split('@')[0] || identifier
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data?.error || 'Login failed')
       }
 
-      login(userId, userName)
-      navigate('/')
+      login(data.token, data.user)
+      if (data.user?.target_score > 0) {
+        navigate('/test')
+      } else {
+        navigate('/profile')
+      }
     } catch (err) {
       setError('Ошибка при входе. Попробуйте еще раз.')
       console.error('Login error:', err)
@@ -47,53 +48,92 @@ function Login() {
   }
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          Вход
-        </h2>
+    <div className="flex min-h-[76vh] items-center justify-center px-4">
+      <div className="w-full max-w-xl rounded-3xl border border-[#e7e4f2] bg-white p-10 shadow-sm">
+        <div className="mb-8 text-center">
+          <span className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-500 text-2xl text-white shadow-md">
+            🧠
+          </span>
+          <h2 className="mt-4 text-4xl font-extrabold text-slate-900">AI-тренажер ЕНТ</h2>
+          <p className="mt-2 text-lg text-slate-500">Войдите в свой аккаунт</p>
+        </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-2">
-              Имя или Email
+            <label htmlFor="email" className="mb-2 block text-base font-medium text-slate-700">
+              Email
             </label>
             <input
-              type="text"
-              id="identifier"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
+              type="email"
+              id="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Введите имя или email"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-lg focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+              placeholder="example@email.com"
             />
-            <p className="mt-2 text-xs text-gray-500">
-              Для MVP: введите "Nurkhan" или "nurkhan@example.com" для тестового аккаунта
-            </p>
+          </div>
+
+          <div>
+            <label htmlFor="password" className="mb-2 block text-base font-medium text-slate-700">
+              Пароль
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-24 text-lg focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+                placeholder="Введите пароль"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-base font-medium text-slate-500 hover:text-slate-700"
+              >
+                {showPassword ? 'Скрыть' : 'Показать'}
+              </button>
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
+            className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-3 text-xl font-semibold text-white shadow-lg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
 
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
+        <div className="my-6 flex items-center gap-3 text-sm text-slate-400">
+          <div className="h-px flex-1 bg-slate-200" />
+          или
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <button
+          type="button"
+          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-xl font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          Войти через Google
+        </button>
+
+        <div className="mt-6 text-center">
+          <p className="text-base text-slate-600">
             Нет аккаунта?{' '}
-            <a href="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+            <Link to="/register" className="font-semibold text-violet-700 hover:text-violet-800">
               Зарегистрироваться
-            </a>
+            </Link>
           </p>
+          <p className="mt-4 text-sm text-slate-500">Тестовый пользователь: `nurkhan@example.com` / пароль `12345678`</p>
         </div>
       </div>
     </div>
@@ -101,5 +141,6 @@ function Login() {
 }
 
 export default Login
+
 
 

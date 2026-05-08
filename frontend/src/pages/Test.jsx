@@ -3,29 +3,68 @@ import { useUser } from '../context/UserContext'
 import { useNavigate } from 'react-router-dom'
 
 function Test() {
-  const { userId } = useUser()
+  const { userId, authLoading } = useUser()
   const navigate = useNavigate()
+  const [selectedSubject, setSelectedSubject] = useState('')
   const [question, setQuestion] = useState(null)
   const [selectedAnswer, setSelectedAnswer] = useState('')
   const [result, setResult] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [aiFeedback, setAiFeedback] = useState('')
+  const [aiFeedbackLoading, setAiFeedbackLoading] = useState(false)
+  const [aiFeedbackError, setAiFeedbackError] = useState('')
+  const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [options, setOptions] = useState([])
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatError, setChatError] = useState('')
 
   useEffect(() => {
+    if (authLoading) return
     if (!userId) {
       navigate('/login')
       return
     }
-    fetchQuestion()
-  }, [userId, navigate])
+  }, [authLoading, userId, navigate])
+
+  const subjectCards = [
+    {
+      id: 'math',
+      name: 'Математическая грамотность',
+      desc: 'Логика, базовые вычисления и практические задачи.',
+      count: '10 вопросов',
+      icon: '🧮',
+    },
+    {
+      id: 'history',
+      name: 'История Казахстана',
+      desc: 'Ключевые события, даты, личности и исторические процессы.',
+      count: '20 вопросов',
+      icon: '🏛️',
+    },
+    {
+      id: 'reading',
+      name: 'Грамотность чтения',
+      desc: 'Понимание текста, анализ и интерпретация информации.',
+      count: '10 вопросов',
+      icon: '📘',
+    },
+  ]
 
   const fetchQuestion = async () => {
     setLoading(true)
     setSelectedAnswer('')
     setResult(null)
+    setAiFeedback('')
+    setAiFeedbackError('')
+    setChatOpen(false)
+    setChatMessages([])
+    setChatInput('')
+    setChatError('')
     try {
-      const response = await fetch('/api/questions')
+      const response = await fetch(`/api/questions?user_id=${userId}`)
       const data = await response.json()
       if (data.length > 0) {
         const q = data[0]
@@ -75,11 +114,13 @@ function Test() {
       })
 
       const data = await response.json()
-      setResult({
+      const nextResult = {
         correct: data.correct,
         correct_answer: data.correct_answer,
         explanation: data.explanation,
-      })
+      }
+      setResult(nextResult)
+      await fetchAIFeedback(nextResult)
     } catch (error) {
       console.error('Error submitting answer:', error)
       alert('Ошибка при отправке ответа')
@@ -92,6 +133,101 @@ function Test() {
     fetchQuestion()
   }
 
+  const startTest = (subjectName) => {
+    setSelectedSubject(subjectName)
+    fetchQuestion()
+  }
+
+  const fetchAIFeedback = async (answerResult) => {
+    if (!question) return
+
+    setAiFeedback('')
+    setAiFeedbackError('')
+    setAiFeedbackLoading(true)
+    try {
+      const response = await fetch('/api/ai-feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: question.question_text,
+          correct_answer: answerResult.correct_answer,
+          user_answer: selectedAnswer,
+          explanation: answerResult.explanation || '',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('AI feedback request failed')
+      }
+
+      const data = await response.json()
+      setAiFeedback(data.ai_feedback || '')
+    } catch (error) {
+      console.error('Error getting AI feedback:', error)
+      setAiFeedbackError('Не удалось получить подсказку от AI. Попробуйте чуть позже.')
+    } finally {
+      setAiFeedbackLoading(false)
+    }
+  }
+
+  const openChat = () => {
+    setChatOpen(true)
+    setChatError('')
+    if (chatMessages.length === 0) {
+      setChatMessages([
+        {
+          role: 'ai',
+          text: 'Я помогу разобрать этот вопрос. Спроси, что осталось непонятно.',
+        },
+      ])
+    }
+  }
+
+  const sendChatMessage = async () => {
+    const trimmed = chatInput.trim()
+    if (!trimmed || chatLoading || !result) return
+
+    const userMessage = { role: 'user', text: trimmed }
+    setChatMessages((prev) => [...prev, userMessage])
+    setChatInput('')
+    setChatError('')
+    setChatLoading(true)
+
+    try {
+      const response = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: trimmed,
+          context: {
+            question: question?.question_text || '',
+            correct_answer: result.correct_answer,
+            user_answer: selectedAnswer,
+          },
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('AI chat request failed')
+      }
+
+      const data = await response.json()
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'ai', text: data.reply || 'Не удалось получить ответ.' },
+      ])
+    } catch (error) {
+      console.error('Error sending message to AI chat:', error)
+      setChatError('Ошибка отправки сообщения. Попробуйте снова.')
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
   const getOptionColor = (option) => {
     if (!result) return 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
     if (option === result.correct_answer) {
@@ -101,6 +237,36 @@ function Test() {
       return 'border-red-500 bg-red-50'
     }
     return 'border-gray-200 bg-gray-50'
+  }
+
+  if (!selectedSubject) {
+    return (
+      <div className="px-2 py-4">
+        <h1 className="text-5xl font-extrabold text-slate-900">
+          Выберите <span className="text-violet-700">предмет</span>
+        </h1>
+        <p className="mt-3 text-2xl text-slate-600">Запустите тест и получите разбор ошибок от AI-ассистента.</p>
+
+        <div className="mt-8 grid gap-6 md:grid-cols-3">
+          {subjectCards.map((subject) => (
+            <div key={subject.id} className="rounded-3xl border border-[#e7e4f2] bg-white p-6 shadow-sm">
+              <div className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-500 text-3xl text-white shadow">
+                {subject.icon}
+              </div>
+              <h2 className="text-5xl font-extrabold leading-tight text-slate-900">{subject.name}</h2>
+              <p className="mt-4 text-xl text-slate-600">{subject.desc}</p>
+              <p className="mt-5 text-lg font-medium text-slate-500">{subject.count}</p>
+              <button
+                onClick={() => startTest(subject.name)}
+                className="mt-5 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-3 text-3xl font-semibold text-white shadow-md transition hover:brightness-105"
+              >
+                Начать тест
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -126,7 +292,7 @@ function Test() {
         <div className="mb-6">
           <div className="mb-4">
             <span className="inline-block text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-              {question.subject} - {question.topic}
+              {selectedSubject} - {question.topic}
             </span>
           </div>
           <h2 className="text-xl md:text-2xl font-semibold text-gray-900 mb-6">
@@ -195,6 +361,19 @@ function Test() {
                 {result.explanation}
               </div>
             )}
+
+            <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+              <div className="text-sm font-semibold text-indigo-900 mb-1">AI-подсказка</div>
+              {aiFeedbackLoading && (
+                <div className="text-sm text-indigo-700">AI анализирует ответ...</div>
+              )}
+              {!aiFeedbackLoading && aiFeedbackError && (
+                <div className="text-sm text-red-700">{aiFeedbackError}</div>
+              )}
+              {!aiFeedbackLoading && !aiFeedbackError && aiFeedback && (
+                <div className="text-sm text-gray-800">{aiFeedback}</div>
+              )}
+            </div>
           </div>
         )}
 
@@ -209,15 +388,91 @@ function Test() {
           </button>
 
           {result && (
-            <button
-              onClick={handleNext}
-              className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
-            >
-              Следующий вопрос
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={openChat}
+                className="bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
+              >
+                Обсудить с AI
+              </button>
+              <button
+                onClick={handleNext}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
+              >
+                Следующий вопрос
+              </button>
+            </div>
           )}
         </div>
       </div>
+
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Обсуждение с AI</h3>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="h-80 overflow-y-auto p-4 bg-gray-50 space-y-3">
+              {chatMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-200 text-gray-800'
+                    }`}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-gray-200 text-gray-600 rounded-2xl px-4 py-2 text-sm">
+                    AI печатает...
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200">
+              {chatError && <div className="text-sm text-red-600 mb-2">{chatError}</div>}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      sendChatMessage()
+                    }
+                  }}
+                  placeholder="Задай вопрос по этой теме..."
+                  className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={!chatInput.trim() || chatLoading}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-medium"
+                >
+                  Отправить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
