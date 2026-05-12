@@ -120,7 +120,12 @@ function Test() {
         explanation: data.explanation,
       }
       setResult(nextResult)
-      await fetchAIFeedback(nextResult)
+      if (!nextResult.correct) {
+        await fetchAIFeedback(nextResult)
+      } else {
+        setAiFeedback('')
+        setAiFeedbackError('')
+      }
     } catch (error) {
       console.error('Error submitting answer:', error)
       alert('Ошибка при отправке ответа')
@@ -362,18 +367,20 @@ function Test() {
               </div>
             )}
 
-            <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-              <div className="text-sm font-semibold text-indigo-900 mb-1">AI-подсказка</div>
-              {aiFeedbackLoading && (
-                <div className="text-sm text-indigo-700">AI анализирует ответ...</div>
-              )}
-              {!aiFeedbackLoading && aiFeedbackError && (
-                <div className="text-sm text-red-700">{aiFeedbackError}</div>
-              )}
-              {!aiFeedbackLoading && !aiFeedbackError && aiFeedback && (
-                <div className="text-sm text-gray-800">{aiFeedback}</div>
-              )}
-            </div>
+            {!result.correct && (
+              <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                <div className="text-sm font-semibold text-indigo-900 mb-1">AI-подсказка</div>
+                {aiFeedbackLoading && (
+                  <div className="text-sm text-indigo-700">AI анализирует ответ...</div>
+                )}
+                {!aiFeedbackLoading && aiFeedbackError && (
+                  <div className="text-sm text-red-700">{aiFeedbackError}</div>
+                )}
+                {!aiFeedbackLoading && !aiFeedbackError && aiFeedback && (
+                  <div className="text-sm text-gray-800">{aiFeedback}</div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

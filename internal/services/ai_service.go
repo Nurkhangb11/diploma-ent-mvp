@@ -40,7 +40,7 @@ type openAIChatResponse struct {
 func GenerateAIFeedback(question, correctAnswer, userAnswer, explanation string) (string, error) {
 	isCorrect := strings.TrimSpace(correctAnswer) == strings.TrimSpace(userAnswer)
 
-	systemPrompt := "Ты доброжелательный преподаватель для школьника. Отвечай только на русском языке. Пиши коротко и понятно, максимум 2-4 предложения."
+	systemPrompt := "Ты доброжелательный преподаватель для школьника. Отвечай только на русском языке. Пиши коротко и понятно, максимум 2-4 предложения. Используй только факты из предоставленного контекста, не придумывай новые данные."
 	userPrompt := fmt.Sprintf(
 		"Сформируй краткую обратную связь по ответу ученика.\n"+
 			"Вопрос: %s\n"+
@@ -61,7 +61,7 @@ func GenerateAIFeedback(question, correctAnswer, userAnswer, explanation string)
 }
 
 func GenerateAIChatReply(message, question, correctAnswer, userAnswer string) (string, error) {
-	systemPrompt := "Ты преподаватель, который помогает школьнику понять тему и исправить ошибки. Отвечай только на русском языке, простыми словами, коротко и по делу."
+	systemPrompt := "Ты преподаватель, который помогает школьнику понять тему и исправить ошибки. Отвечай только на русском языке, простыми словами, коротко и по делу. Используй только факты из контекста вопроса и ошибок; если контекста не хватает, честно скажи об этом."
 	userPrompt := fmt.Sprintf(
 		"Контекст:\nВопрос: %s\nПравильный ответ: %s\nОтвет ученика: %s\n\nСообщение ученика: %s",
 		question,
@@ -90,7 +90,7 @@ func callOpenAI(systemPrompt, userPrompt string) (string, error) {
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
-		Temperature: 0.7,
+		Temperature: 0.25,
 		MaxTokens:   220,
 	}
 

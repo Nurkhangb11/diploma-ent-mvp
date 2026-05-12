@@ -3,6 +3,7 @@ package handlers
 import (
 	"diploma-ent-mvp/internal/services"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +42,10 @@ func GetAIFeedback(c *gin.Context) {
 
 	feedback, err := services.GenerateAIFeedback(req.Question, req.CorrectAnswer, req.UserAnswer, req.Explanation)
 	if err != nil {
+		if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI is not configured: OPENAI_API_KEY is missing"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate AI feedback"})
 		return
 	}
@@ -64,6 +69,10 @@ func ChatWithAI(c *gin.Context) {
 		req.Context.UserAnswer,
 	)
 	if err != nil {
+		if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI is not configured: OPENAI_API_KEY is missing"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate AI reply"})
 		return
 	}
