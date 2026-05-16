@@ -2,6 +2,7 @@ package services
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/entconfig"
 	"diploma-ent-mvp/internal/models"
 	"math"
 )
@@ -13,19 +14,20 @@ const (
 
 // PredictionResult содержит результат прогноза баллов
 type PredictionResult struct {
-	PredictedScore float64 `json:"predicted_score"`
-	Confidence     float64 `json:"confidence"`
-	ConfidenceLevel string `json:"confidence_level"` // "low", "medium", "high"
-	Message        string  `json:"message"`
-	SectionScores []SectionScore `json:"section_scores"`
+	PredictedScore  float64        `json:"predicted_score"`
+	MaxScore        int            `json:"max_score"`
+	Confidence      float64        `json:"confidence"`
+	ConfidenceLevel string         `json:"confidence_level"` // "low", "medium", "high"
+	Message         string         `json:"message"`
+	SectionScores   []SectionScore `json:"section_scores"`
 }
 
 // SectionScore содержит балл за конкретную тему
 type SectionScore struct {
 	SectionName string  `json:"section_name"`
 	Weight      int     `json:"weight"`
-	Mastery    float64 `json:"mastery"`
-	Score      float64 `json:"score"`
+	Mastery     float64 `json:"mastery"`
+	Score       float64 `json:"score"`
 }
 
 // CalculatePrediction рассчитывает прогнозируемый балл для пользователя по предмету
@@ -42,12 +44,14 @@ func CalculatePrediction(userID uint, subjectName string) (*PredictionResult, er
 		return nil, err
 	}
 
-	var totalPredictedScore float64
+	var rawWeightedSum float64
 	var sectionScores []SectionScore
 	totalAttempts := 0
+	totalSectionWeight := 0
 
 	// Рассчитать балл для каждой секции
 	for _, section := range sections {
+		totalSectionWeight += section.Weight
 		// Получить все подтемы секции
 		var subtopics []models.Subtopic
 		if err := database.DB.Where("section_id = ?", section.ID).Find(&subtopics).Error; err != nil {
@@ -109,7 +113,7 @@ func CalculatePrediction(userID uint, subjectName string) (*PredictionResult, er
 
 		// Балл за тему = вес_темы × освоенность_темы
 		sectionScore := float64(section.Weight) * sectionMastery
-		totalPredictedScore += sectionScore
+		rawWeightedSum += sectionScore
 
 		sectionScores = append(sectionScores, SectionScore{
 			SectionName: section.Name,
@@ -119,20 +123,45 @@ func CalculatePrediction(userID uint, subjectName string) (*PredictionResult, er
 		})
 	}
 
+	subjectMax := entconfig.MaxPoints(subjectName)
+	predictedScore := scaleToSubjectMax(rawWeightedSum, totalSectionWeight, subjectMax)
+
 	// Рассчитать доверие
 	confidence := calculateConfidence(totalAttempts)
 	confidenceLevel := getConfidenceLevel(confidence)
 
 	// Формировать сообщение
-	message := formatMessage(totalPredictedScore, confidence, confidenceLevel)
+	message := formatMessage(predictedScore, confidence, confidenceLevel)
 
 	return &PredictionResult{
-		PredictedScore: math.Round(totalPredictedScore*10) / 10, // Округление до 1 знака
-		Confidence:     confidence,
+		PredictedScore:  math.Round(predictedScore*10) / 10,
+		MaxScore:        subjectMax,
+		Confidence:      confidence,
 		ConfidenceLevel: confidenceLevel,
-		Message:        message,
-		SectionScores:  sectionScores,
+		Message:         message,
+		SectionScores:   sectionScores,
 	}, nil
+}
+
+// scaleToSubjectMax maps raw weighted sum (section weights) to the subject ENT cap.
+func scaleToSubjectMax(rawSum float64, totalSectionWeight, subjectMax int) float64 {
+	if subjectMax <= 0 {
+		return rawSum
+	}
+	if totalSectionWeight <= 0 {
+		if rawSum > float64(subjectMax) {
+			return float64(subjectMax)
+		}
+		return rawSum
+	}
+	scaled := rawSum * float64(subjectMax) / float64(totalSectionWeight)
+	if scaled > float64(subjectMax) {
+		scaled = float64(subjectMax)
+	}
+	if scaled < 0 {
+		scaled = 0
+	}
+	return scaled
 }
 
 // calculateConfidence рассчитывает уровень доверия к прогнозу
@@ -175,4 +204,3 @@ func formatMessage(score, confidence float64, level string) string {
 
 	return "ℹ️ Средняя точность прогноза."
 }
-

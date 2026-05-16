@@ -6,6 +6,7 @@ import (
 	"diploma-ent-mvp/internal/services"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,6 +25,7 @@ type QuestionResponse struct {
 
 func GetRandomQuestion(c *gin.Context) {
 	userIDStr := c.Query("user_id")
+	subject := strings.TrimSpace(c.Query("subject"))
 
 	var question models.Question
 	var meta services.QuestionSelectionMeta
@@ -31,7 +33,11 @@ func GetRandomQuestion(c *gin.Context) {
 
 	// If user_id not passed -> keep current behavior (random question).
 	if userIDStr == "" {
-		err = database.DB.Order("RANDOM()").First(&question).Error
+		q := database.DB.Order("RANDOM()")
+		if subject != "" {
+			q = q.Where("subject = ?", subject)
+		}
+		err = q.First(&question).Error
 		if err != nil {
 			// If no questions found, return empty array
 			c.JSON(http.StatusOK, []QuestionResponse{})
@@ -45,7 +51,7 @@ func GetRandomQuestion(c *gin.Context) {
 			return
 		}
 
-		question, meta, err = services.GetAdaptiveQuestion(uint(userID64))
+		question, meta, err = services.GetAdaptiveQuestion(uint(userID64), subject)
 		if err != nil {
 			c.JSON(http.StatusOK, []QuestionResponse{})
 			return

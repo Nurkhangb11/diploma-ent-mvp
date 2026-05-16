@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useUser } from '../context/UserContext'
+import Spinner from '../components/Spinner'
 
-function Profile() {
-  const { token, authLoading } = useUser()
+const TARGETS = [50, 70, 90, 120]
+
+export default function Profile() {
+  const { token, authLoading, refreshUser } = useUser()
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
@@ -12,7 +16,7 @@ function Profile() {
 
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState('')
-  const [targetScore, setTargetScore] = useState(0)
+  const [targetScore, setTargetScore] = useState(90)
 
   useEffect(() => {
     if (authLoading) return
@@ -23,17 +27,14 @@ function Profile() {
       setError('')
       try {
         const response = await fetch('/api/profile', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         })
-        if (!response.ok) {
-          throw new Error('Failed to load profile')
-        }
+        if (!response.ok) throw new Error('Failed to load profile')
         const data = await response.json()
         setName(data.user?.name || '')
         setAvatar(data.user?.avatar || '')
-        setTargetScore(data.user?.target_score || 0)
+        const ts = data.user?.target_score || 0
+        setTargetScore(ts > 0 ? ts : 90)
       } catch (e) {
         console.error('Profile error:', e)
         setError('Ошибка при загрузке профиля')
@@ -64,11 +65,10 @@ function Profile() {
         }),
       })
 
-      if (!response.ok) {
-        throw new Error('Failed to update profile')
-      }
+      if (!response.ok) throw new Error('Failed to update profile')
 
-      navigate('/test')
+      await refreshUser()
+      navigate('/dashboard')
     } catch (e) {
       console.error('Save profile error:', e)
       setError('Ошибка при сохранении')
@@ -79,98 +79,101 @@ function Profile() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-gray-600 text-lg">Загрузка профиля...</div>
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+        <Spinner />
+        <p className="text-sm text-[color:var(--app-muted)]">Загрузка профиля…</p>
       </div>
     )
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="bg-white rounded-xl shadow-lg p-6 md:p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Профиль</h1>
+    <div className="mx-auto max-w-lg px-2 py-6">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-panel rounded-3xl p-6 md:p-8"
+      >
+        <h1 className="text-2xl font-bold text-[color:var(--app-fg)]">Профиль</h1>
+        <p className="mt-1 text-sm text-[color:var(--app-muted)]">Аватар по ссылке и целевой балл для дашборда</p>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            {error}
-          </div>
+          <div className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>
         )}
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+        <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+          <motion.div
+            className="relative h-24 w-24 shrink-0 overflow-hidden rounded-full ring-4 ring-violet-500/30"
+            whileHover={{ scale: 1.03 }}
+          >
             {avatar ? (
-              <img src={avatar} alt="avatar" className="w-full h-full object-cover" />
+              <img src={avatar} alt="" className="h-full w-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
             ) : (
-              <span className="text-gray-500 text-sm">AI</span>
+              <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500 to-fuchsia-600 text-3xl font-bold text-white">
+                {(name || '?').slice(0, 1).toUpperCase()}
+              </div>
             )}
-          </div>
-          <div>
-            <div className="text-sm text-gray-600 mb-1">Текущий пользователь</div>
-            <div className="font-semibold">{name || '—'}</div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Имя</label>
+          </motion.div>
+          <div className="flex-1 text-center sm:text-left">
+            <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--app-muted)]">Имя</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="mt-1 w-full rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-2.5 text-[color:var(--app-fg)] focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Avatar URL</label>
-            <input
-              value={avatar}
-              onChange={(e) => setAvatar(e.target.value)}
-              placeholder="https://..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Цель (target score)</label>
-            <div className="grid grid-cols-3 gap-3">
-              {[50, 70, 120].map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setTargetScore(v)}
-                  className={`px-3 py-2 rounded-lg border text-sm font-semibold transition ${
-                    targetScore === v
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
-        <div className="mt-6 flex gap-3">
-          <button
+        <div className="mt-6">
+          <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--app-muted)]">URL аватара</label>
+          <input
+            value={avatar}
+            onChange={(e) => setAvatar(e.target.value)}
+            placeholder="https://…"
+            className="mt-1 w-full rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-2.5 text-sm text-[color:var(--app-fg)] focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+          />
+        </div>
+
+        <div className="mt-8">
+          <label className="text-xs font-medium uppercase tracking-wide text-[color:var(--app-muted)]">Целевой балл (ЕНТ)</label>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {TARGETS.map((v) => (
+              <motion.button
+                key={v}
+                type="button"
+                onClick={() => setTargetScore(v)}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.98 }}
+                className={`rounded-xl border px-3 py-3 text-center text-sm font-bold transition ${
+                  targetScore === v
+                    ? 'border-violet-400 bg-violet-500/20 text-violet-200 shadow-[0_0_24px_-8px_rgba(139,92,246,0.6)]'
+                    : 'border-[color:var(--app-border)] bg-[color:var(--app-card)] text-[color:var(--app-fg)] hover:border-violet-400/40'
+                }`}
+              >
+                {v}
+              </motion.button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+          <motion.button
+            type="button"
             onClick={handleSave}
             disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
+            whileHover={{ scale: saving ? 1 : 1.02 }}
+            className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 font-semibold text-white shadow-lg shadow-violet-500/25 disabled:opacity-60"
           >
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </button>
-
+            {saving ? 'Сохранение…' : 'Сохранить и в дашборд'}
+          </motion.button>
           <button
-            onClick={() => navigate('/test')}
-            className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-semibold py-3 px-6 rounded-lg transition duration-200"
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="rounded-xl border border-[color:var(--app-border)] px-6 py-3 font-semibold text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]"
           >
             Пропустить
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   )
 }
-
-export default Profile
-

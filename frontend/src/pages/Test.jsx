@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useUser } from '../context/UserContext'
+import { useSubject } from '../context/SubjectContext'
 import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import GlassCard from '../components/GlassCard'
+import Spinner from '../components/Spinner'
 
-function Test() {
+export default function Test() {
   const { userId, authLoading } = useUser()
+  const { setSubject: setGlobalSubject } = useSubject()
   const navigate = useNavigate()
   const [selectedSubject, setSelectedSubject] = useState('')
   const [question, setQuestion] = useState(null)
@@ -20,13 +25,11 @@ function Test() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [chatError, setChatError] = useState('')
+  const [sessionCount, setSessionCount] = useState(0)
 
   useEffect(() => {
     if (authLoading) return
-    if (!userId) {
-      navigate('/login')
-      return
-    }
+    if (!userId) navigate('/login')
   }, [authLoading, userId, navigate])
 
   const subjectCards = [
@@ -34,26 +37,27 @@ function Test() {
       id: 'math',
       name: 'Математическая грамотность',
       desc: 'Логика, базовые вычисления и практические задачи.',
-      count: '10 вопросов',
+      count: 'Адаптивная серия',
       icon: '🧮',
     },
     {
       id: 'history',
       name: 'История Казахстана',
-      desc: 'Ключевые события, даты, личности и исторические процессы.',
-      count: '20 вопросов',
+      desc: 'События, даты, личности и процессы.',
+      count: 'Адаптивная серия',
       icon: '🏛️',
     },
     {
       id: 'reading',
       name: 'Грамотность чтения',
-      desc: 'Понимание текста, анализ и интерпретация информации.',
-      count: '10 вопросов',
+      desc: 'Понимание и анализ текстов.',
+      count: 'Адаптивная серия',
       icon: '📘',
     },
   ]
 
-  const fetchQuestion = async () => {
+  const fetchQuestion = async (subjectOverride) => {
+    const subjectParam = subjectOverride ?? selectedSubject
     setLoading(true)
     setSelectedAnswer('')
     setResult(null)
@@ -64,18 +68,20 @@ function Test() {
     setChatInput('')
     setChatError('')
     try {
-      const response = await fetch(`/api/questions?user_id=${userId}`)
+      const response = await fetch(
+        `/api/questions?user_id=${userId}&subject=${encodeURIComponent(subjectParam)}`
+      )
       const data = await response.json()
       if (data.length > 0) {
         const q = data[0]
         setQuestion(q)
-        // Parse options JSON string to array
         try {
           const opts = typeof q.options === 'string' ? JSON.parse(q.options) : q.options
           setOptions(opts || [])
-        } catch (e) {
+        } catch {
           setOptions([])
         }
+        setSessionCount((c) => c + 1)
       } else {
         setQuestion(null)
         setOptions([])
@@ -88,24 +94,17 @@ function Test() {
   }
 
   const handleAnswerSelect = (answer) => {
-    if (!result) {
-      setSelectedAnswer(answer)
-    }
+    if (!result) setSelectedAnswer(answer)
   }
 
   const handleSubmitAnswer = async () => {
-    if (!selectedAnswer || !question) {
-      alert('Пожалуйста, выберите ответ')
-      return
-    }
+    if (!selectedAnswer || !question) return
 
     setSubmitting(true)
     try {
       const response = await fetch('/api/answer', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: userId,
           question_id: question.id,
@@ -120,41 +119,36 @@ function Test() {
         explanation: data.explanation,
       }
       setResult(nextResult)
-      if (!nextResult.correct) {
-        await fetchAIFeedback(nextResult)
-      } else {
+      if (!nextResult.correct) await fetchAIFeedback(nextResult)
+      else {
         setAiFeedback('')
         setAiFeedbackError('')
       }
     } catch (error) {
       console.error('Error submitting answer:', error)
-      alert('Ошибка при отправке ответа')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleNext = () => {
-    fetchQuestion()
-  }
+  const handleNext = () => fetchQuestion()
 
   const startTest = (subjectName) => {
+    setGlobalSubject(subjectName)
     setSelectedSubject(subjectName)
-    fetchQuestion()
+    setSessionCount(0)
+    fetchQuestion(subjectName)
   }
 
   const fetchAIFeedback = async (answerResult) => {
     if (!question) return
-
     setAiFeedback('')
     setAiFeedbackError('')
     setAiFeedbackLoading(true)
     try {
       const response = await fetch('/api/ai-feedback', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: question.question_text,
           correct_answer: answerResult.correct_answer,
@@ -162,16 +156,12 @@ function Test() {
           explanation: answerResult.explanation || '',
         }),
       })
-
-      if (!response.ok) {
-        throw new Error('AI feedback request failed')
-      }
-
+      if (!response.ok) throw new Error('AI feedback request failed')
       const data = await response.json()
       setAiFeedback(data.ai_feedback || '')
     } catch (error) {
       console.error('Error getting AI feedback:', error)
-      setAiFeedbackError('Не удалось получить подсказку от AI. Попробуйте чуть позже.')
+      setAiFeedbackError('Не удалось получить подсказку от AI.')
     } finally {
       setAiFeedbackLoading(false)
     }
@@ -182,10 +172,7 @@ function Test() {
     setChatError('')
     if (chatMessages.length === 0) {
       setChatMessages([
-        {
-          role: 'ai',
-          text: 'Я помогу разобрать этот вопрос. Спроси, что осталось непонятно.',
-        },
+        { role: 'ai', text: 'Разберём этот вопрос вместе. Что именно непонятно?' },
       ])
     }
   }
@@ -193,19 +180,14 @@ function Test() {
   const sendChatMessage = async () => {
     const trimmed = chatInput.trim()
     if (!trimmed || chatLoading || !result) return
-
-    const userMessage = { role: 'user', text: trimmed }
-    setChatMessages((prev) => [...prev, userMessage])
+    setChatMessages((prev) => [...prev, { role: 'user', text: trimmed }])
     setChatInput('')
     setChatError('')
     setChatLoading(true)
-
     try {
       const response = await fetch('/api/ai-chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: trimmed,
           context: {
@@ -215,59 +197,68 @@ function Test() {
           },
         }),
       })
-
-      if (!response.ok) {
-        throw new Error('AI chat request failed')
-      }
-
+      if (!response.ok) throw new Error('AI chat request failed')
       const data = await response.json()
-      setChatMessages((prev) => [
-        ...prev,
-        { role: 'ai', text: data.reply || 'Не удалось получить ответ.' },
-      ])
+      setChatMessages((prev) => [...prev, { role: 'ai', text: data.reply || 'Не удалось получить ответ.' }])
     } catch (error) {
       console.error('Error sending message to AI chat:', error)
-      setChatError('Ошибка отправки сообщения. Попробуйте снова.')
+      setChatError('Ошибка отправки. Попробуйте снова.')
     } finally {
       setChatLoading(false)
     }
   }
 
-  const getOptionColor = (option) => {
-    if (!result) return 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-    if (option === result.correct_answer) {
-      return 'border-green-500 bg-green-50'
+  const progressPct = Math.min(100, sessionCount * 12)
+
+  const optionClass = (option) => {
+    if (!result) {
+      const sel = selectedAnswer === option
+      return sel
+        ? 'border-violet-400 bg-violet-500/15 shadow-[0_0_24px_-8px_rgba(139,92,246,0.5)]'
+        : 'border-[color:var(--app-border)] bg-[color:var(--app-card)] hover:border-violet-400/40'
     }
-    if (option === selectedAnswer && !result.correct) {
-      return 'border-red-500 bg-red-50'
-    }
-    return 'border-gray-200 bg-gray-50'
+    if (option === result.correct_answer) return 'border-emerald-400/80 bg-emerald-500/15 ring-2 ring-emerald-400/40'
+    if (option === selectedAnswer && !result.correct) return 'border-red-400/80 bg-red-500/15 ring-2 ring-red-400/40'
+    return 'border-[color:var(--app-border)] opacity-60'
   }
 
   if (!selectedSubject) {
     return (
-      <div className="px-2 py-4">
-        <h1 className="text-5xl font-extrabold text-slate-900">
-          Выберите <span className="text-violet-700">предмет</span>
-        </h1>
-        <p className="mt-3 text-2xl text-slate-600">Запустите тест и получите разбор ошибок от AI-ассистента.</p>
-
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          {subjectCards.map((subject) => (
-            <div key={subject.id} className="rounded-3xl border border-[#e7e4f2] bg-white p-6 shadow-sm">
-              <div className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-500 text-3xl text-white shadow">
-                {subject.icon}
-              </div>
-              <h2 className="text-5xl font-extrabold leading-tight text-slate-900">{subject.name}</h2>
-              <p className="mt-4 text-xl text-slate-600">{subject.desc}</p>
-              <p className="mt-5 text-lg font-medium text-slate-500">{subject.count}</p>
-              <button
-                onClick={() => startTest(subject.name)}
-                className="mt-5 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-3 text-3xl font-semibold text-white shadow-md transition hover:brightness-105"
-              >
-                Начать тест
-              </button>
-            </div>
+      <div className="space-y-8">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-4xl font-extrabold tracking-tight text-[color:var(--app-fg)] md:text-5xl">
+            Выберите <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">предмет</span>
+          </h1>
+          <p className="mt-3 max-w-2xl text-lg text-[color:var(--app-muted)]">
+            Адаптивная выдача вопросов и мгновенный разбор через AI.
+          </p>
+        </motion.div>
+        <div className="grid gap-5 md:grid-cols-3">
+          {subjectCards.map((subject, i) => (
+            <motion.div
+              key={subject.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08 * i }}
+            >
+              <GlassCard className="flex h-full flex-col p-6">
+                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-2xl shadow-lg">
+                  {subject.icon}
+                </div>
+                <h2 className="text-xl font-bold text-[color:var(--app-fg)]">{subject.name}</h2>
+                <p className="mt-2 flex-1 text-sm text-[color:var(--app-muted)]">{subject.desc}</p>
+                <p className="mt-4 text-xs font-medium uppercase tracking-wide text-[color:var(--app-muted)]">{subject.count}</p>
+                <motion.button
+                  type="button"
+                  onClick={() => startTest(subject.name)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="mt-5 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/25"
+                >
+                  Начать
+                </motion.button>
+              </GlassCard>
+            </motion.div>
           ))}
         </div>
       </div>
@@ -276,167 +267,212 @@ function Test() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-gray-600 text-lg">Загрузка вопроса...</div>
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+        <Spinner />
+        <p className="text-sm text-[color:var(--app-muted)]">Подбираем вопрос…</p>
       </div>
     )
   }
 
   if (!question) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-gray-600 text-lg">Вопросы не найдены</div>
-      </div>
+      <GlassCard className="p-10 text-center">
+        <p className="text-[color:var(--app-muted)]">Вопросы не найдены</p>
+        <button
+          type="button"
+          onClick={() => setSelectedSubject('')}
+          className="mt-6 rounded-xl border border-[color:var(--app-border)] px-6 py-2 text-sm font-semibold"
+        >
+          Назад к предметам
+        </button>
+      </GlassCard>
     )
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="bg-white rounded-lg shadow-lg p-6 md:p-8">
-        {/* Question Card */}
-        <div className="mb-6">
-          <div className="mb-4">
-            <span className="inline-block text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-              {selectedSubject} - {question.topic}
-            </span>
-          </div>
-          <h2 className="text-xl md:text-2xl font-semibold text-gray-900 mb-6">
-            {question.question_text}
-          </h2>
-
-          {/* Options */}
-          <div className="space-y-3 mb-6">
-            {options.map((option, index) => (
-              <button
-                key={index}
-                onClick={() => handleAnswerSelect(option)}
-                disabled={!!result}
-                className={`w-full text-left p-4 border-2 rounded-lg transition duration-200 ${getOptionColor(option)} ${
-                  selectedAnswer === option && !result
-                    ? 'border-blue-500 bg-blue-50'
-                    : ''
-                } ${result ? 'cursor-default' : 'cursor-pointer'}`}
-              >
-                <div className="flex items-center">
-                  <div
-                    className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center ${
-                      selectedAnswer === option
-                        ? result && option === result.correct_answer
-                          ? 'border-green-500 bg-green-500'
-                          : result && option === selectedAnswer && !result.correct
-                          ? 'border-red-500 bg-red-500'
-                          : 'border-blue-500 bg-blue-500'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    {selectedAnswer === option && (
-                      <span className="text-white text-xs">●</span>
-                    )}
-                  </div>
-                  <span className="text-gray-700">{option}</span>
-                </div>
-              </button>
-            ))}
-          </div>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-violet-400">Сессия</p>
+          <p className="text-[color:var(--app-muted)]">
+            {selectedSubject} · вопрос <span className="font-semibold text-[color:var(--app-fg)]">#{sessionCount}</span>
+          </p>
         </div>
-
-        {/* Result */}
-        {result && (
-          <div
-            className={`mb-6 p-4 md:p-6 rounded-lg border-2 ${
-              result.correct
-                ? 'bg-green-50 border-green-200'
-                : 'bg-red-50 border-red-200'
-            }`}
-          >
-            <div className="font-semibold text-lg mb-3">
-              {result.correct ? (
-                <span className="text-green-800">✓ Правильно!</span>
-              ) : (
-                <span className="text-red-800">✗ Неправильно</span>
-              )}
-            </div>
-            <div className="mb-3">
-              <span className="text-sm font-medium text-gray-700">Правильный ответ: </span>
-              <span className="text-sm font-semibold text-gray-900">{result.correct_answer}</span>
-            </div>
-            {result.explanation && (
-              <div className="text-sm text-gray-700 bg-white p-3 rounded border border-gray-200">
-                <span className="font-medium">Объяснение: </span>
-                {result.explanation}
-              </div>
-            )}
-
-            {!result.correct && (
-              <div className="mt-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                <div className="text-sm font-semibold text-indigo-900 mb-1">AI-подсказка</div>
-                {aiFeedbackLoading && (
-                  <div className="text-sm text-indigo-700">AI анализирует ответ...</div>
-                )}
-                {!aiFeedbackLoading && aiFeedbackError && (
-                  <div className="text-sm text-red-700">{aiFeedbackError}</div>
-                )}
-                {!aiFeedbackLoading && !aiFeedbackError && aiFeedback && (
-                  <div className="text-sm text-gray-800">{aiFeedback}</div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between">
-          <button
-            onClick={handleSubmitAnswer}
-            disabled={!selectedAnswer || submitting || result}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
-          >
-            {submitting ? 'Отправка...' : 'Отправить ответ'}
-          </button>
-
-          {result && (
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={openChat}
-                className="bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
-              >
-                Обсудить с AI
-              </button>
-              <button
-                onClick={handleNext}
-                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
-              >
-                Следующий вопрос
-              </button>
-            </div>
-          )}
+        <div className="h-2 w-full overflow-hidden rounded-full bg-[color:var(--app-card)] sm:max-w-xs">
+          <motion.div
+            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPct}%` }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          />
         </div>
       </div>
 
-      {chatOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Обсуждение с AI</h3>
-              <button
-                onClick={() => setChatOpen(false)}
-                className="text-gray-500 hover:text-gray-700 text-sm"
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={question.id}
+          initial={{ opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.35 }}
+        >
+          <GlassCard hover={false} className="p-6 md:p-8">
+            <div className="mb-6 inline-flex rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-1 text-xs font-medium text-[color:var(--app-muted)]">
+              {question.topic}
+            </div>
+            <h2 className="text-xl font-semibold leading-snug text-[color:var(--app-fg)] md:text-2xl">{question.question_text}</h2>
+
+            <div className="mt-8 space-y-3">
+              {options.map((option, index) => (
+                <motion.button
+                  key={index}
+                  type="button"
+                  onClick={() => handleAnswerSelect(option)}
+                  disabled={!!result}
+                  whileHover={!result ? { scale: 1.01 } : {}}
+                  whileTap={!result ? { scale: 0.99 } : {}}
+                  className={`flex w-full items-start gap-3 rounded-2xl border-2 px-4 py-4 text-left transition ${optionClass(option)}`}
+                >
+                  <span
+                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                      selectedAnswer === option ? 'border-violet-400 bg-violet-500 text-white' : 'border-[color:var(--app-border)]'
+                    }`}
+                  >
+                    {String.fromCharCode(65 + index)}
+                  </span>
+                  <span className="text-[color:var(--app-fg)]">{option}</span>
+                </motion.button>
+              ))}
+            </div>
+
+            {!result && (
+              <motion.button
+                type="button"
+                onClick={handleSubmitAnswer}
+                disabled={!selectedAnswer || submitting}
+                whileHover={{ scale: submitting ? 1 : 1.02 }}
+                className="mt-8 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 font-semibold text-white shadow-lg disabled:opacity-50"
               >
+                {submitting ? 'Проверка…' : 'Ответить'}
+              </motion.button>
+            )}
+          </GlassCard>
+        </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm sm:items-center"
+            onClick={(e) => e.target === e.currentTarget && null}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.96 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                boxShadow: result.correct
+                  ? '0 0 80px -20px rgba(52, 211, 153, 0.45)'
+                  : '0 0 80px -20px rgba(248, 113, 113, 0.35)',
+              }}
+              transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+              className={`glass-panel max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border p-6 md:p-8 ${
+                result.correct ? 'border-emerald-400/40' : 'border-red-400/35'
+              }`}
+            >
+              <div className="text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', delay: 0.05 }}
+                  className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full text-3xl ${
+                    result.correct ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                  }`}
+                >
+                  {result.correct ? '✓' : '✗'}
+                </motion.div>
+                <h3 className={`text-2xl font-bold ${result.correct ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {result.correct ? 'Отлично!' : 'Почти — разберём ошибку'}
+                </h3>
+                <p className="mt-2 text-sm text-[color:var(--app-muted)]">
+                  {result.correct ? 'Так держать — переходи к следующему вопросу.' : 'Ниже правильный ответ и подсказка AI.'}
+                </p>
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-4 text-sm">
+                <span className="text-[color:var(--app-muted)]">Верный ответ:</span>
+                <p className="mt-1 font-semibold text-[color:var(--app-fg)]">{result.correct_answer}</p>
+              </div>
+
+              {result.explanation && (
+                <div className="mt-4 rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-4 text-sm text-[color:var(--app-fg)]">
+                  <span className="font-semibold text-[color:var(--app-muted)]">Комментарий: </span>
+                  {result.explanation}
+                </div>
+              )}
+
+              {!result.correct && (
+                <div className="mt-4 rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-violet-300">AI-разбор</p>
+                  {aiFeedbackLoading && <p className="mt-2 animate-pulse text-sm text-violet-200">Анализ ответа…</p>}
+                  {!aiFeedbackLoading && aiFeedbackError && <p className="mt-2 text-sm text-red-300">{aiFeedbackError}</p>}
+                  {!aiFeedbackLoading && !aiFeedbackError && aiFeedback && (
+                    <p className="mt-2 text-sm leading-relaxed text-[color:var(--app-fg)]">{aiFeedback}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <motion.button
+                  type="button"
+                  onClick={openChat}
+                  whileHover={{ scale: 1.02 }}
+                  className="flex-1 rounded-xl border border-[color:var(--app-border)] py-3 font-semibold text-[color:var(--app-fg)]"
+                >
+                  Обсудить с AI
+                </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={handleNext}
+                  whileHover={{ scale: 1.02 }}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 font-semibold text-white shadow-lg"
+                >
+                  Дальше
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {chatOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-4 backdrop-blur-md"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="glass-panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-[color:var(--app-border)] shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-[color:var(--app-border)] px-5 py-4">
+              <h3 className="font-semibold text-[color:var(--app-fg)]">Обсуждение с AI</h3>
+              <button type="button" onClick={() => setChatOpen(false)} className="text-sm text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]">
                 Закрыть
               </button>
             </div>
-
-            <div className="h-80 overflow-y-auto p-4 bg-gray-50 space-y-3">
+            <div className="flex-1 space-y-3 overflow-y-auto bg-black/10 p-4">
               {chatMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
                       msg.role === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white border border-gray-200 text-gray-800'
+                        ? 'bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white'
+                        : 'border border-[color:var(--app-border)] bg-[color:var(--app-card)] text-[color:var(--app-fg)]'
                     }`}
                   >
                     {msg.text}
@@ -445,15 +481,14 @@ function Test() {
               ))}
               {chatLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-white border border-gray-200 text-gray-600 rounded-2xl px-4 py-2 text-sm">
-                    AI печатает...
+                  <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-2 text-sm text-[color:var(--app-muted)]">
+                    Печатает…
                   </div>
                 </div>
               )}
             </div>
-
-            <div className="p-4 border-t border-gray-200">
-              {chatError && <div className="text-sm text-red-600 mb-2">{chatError}</div>}
+            <div className="border-t border-[color:var(--app-border)] p-4">
+              {chatError && <div className="mb-2 text-sm text-red-400">{chatError}</div>}
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -465,23 +500,23 @@ function Test() {
                       sendChatMessage()
                     }
                   }}
-                  placeholder="Задай вопрос по этой теме..."
-                  className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Вопрос по теме…"
+                  className="flex-1 rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-2.5 text-sm text-[color:var(--app-fg)] focus:border-violet-400/60 focus:outline-none"
                 />
-                <button
+                <motion.button
+                  type="button"
                   onClick={sendChatMessage}
                   disabled={!chatInput.trim() || chatLoading}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-medium"
+                  whileTap={{ scale: 0.97 }}
+                  className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   Отправить
-                </button>
+                </motion.button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
     </div>
   )
 }
-
-export default Test

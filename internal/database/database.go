@@ -27,6 +27,7 @@ func InitDB() {
 		&models.Subtopic{},
 		&models.Question{},
 		&models.Attempt{},
+		&models.WeeklyAIPlan{},
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
@@ -34,12 +35,17 @@ func InitDB() {
 
 	log.Println("Database migrated successfully")
 
-	// Seed subject structure first (before questions)
-	SeedSubjectStructure()
-
-	// Seed questions if table is empty
+	// Flat questions first so *_kz.json refs can attach subtopic_id to existing rows.
 	SeedQuestions()
+
+	// Subject → Section → Subtopic (+ embedded questions or id refs)
+	SeedSubjectStructure()
 
 	// Seed users
 	SeedUsers()
+
+	// Demo account for product showcase (after questions + subjects exist)
+	SeedDemoUser()
+
+	SyncSubjectENTMaxScores()
 }

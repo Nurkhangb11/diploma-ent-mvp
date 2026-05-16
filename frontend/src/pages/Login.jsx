@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useUser } from '../context/UserContext'
+import { useToast } from '../context/ToastContext'
 
-function Login() {
+export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -10,6 +12,7 @@ function Login() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const { login } = useUser()
+  const { showToast } = useToast()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -19,28 +22,31 @@ function Login() {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       })
 
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data?.error || 'Login failed')
+        const msg =
+          typeof data?.error === 'string'
+            ? data.error === 'invalid credentials'
+              ? 'Неверный email или пароль'
+              : data.error
+            : 'Не удалось войти'
+        setError(msg)
+        showToast(msg, 'error')
+        return
       }
 
       login(data.token, data.user)
-      if (data.user?.target_score > 0) {
-        navigate('/test')
-      } else {
-        navigate('/profile')
-      }
+      showToast('С возвращением!', 'success')
+      if (data.user?.target_score > 0) navigate('/dashboard')
+      else navigate('/profile')
     } catch (err) {
-      setError('Ошибка при входе. Попробуйте еще раз.')
+      const msg = 'Сеть недоступна или сервер не ответил'
+      setError(msg)
+      showToast(msg, 'error')
       console.error('Login error:', err)
     } finally {
       setLoading(false)
@@ -48,25 +54,31 @@ function Login() {
   }
 
   return (
-    <div className="flex min-h-[76vh] items-center justify-center px-4">
-      <div className="w-full max-w-xl rounded-3xl border border-[#e7e4f2] bg-white p-10 shadow-sm">
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+        className="glass-panel w-full max-w-md rounded-3xl p-8 shadow-[0_0_60px_-20px_var(--app-glow)] md:p-10"
+      >
         <div className="mb-8 text-center">
-          <span className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-500 text-2xl text-white shadow-md">
+          <motion.span
+            className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-3xl shadow-lg shadow-violet-500/40"
+            whileHover={{ scale: 1.05, rotate: -4 }}
+          >
             🧠
-          </span>
-          <h2 className="mt-4 text-4xl font-extrabold text-slate-900">AI-тренажер ЕНТ</h2>
-          <p className="mt-2 text-lg text-slate-500">Войдите в свой аккаунт</p>
+          </motion.span>
+          <h2 className="mt-5 text-3xl font-extrabold text-[color:var(--app-fg)]">С возвращением</h2>
+          <p className="mt-2 text-[color:var(--app-muted)]">Войди и продолжи серию 🔥</p>
         </div>
 
         {error && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="mb-5 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="email" className="mb-2 block text-base font-medium text-slate-700">
+            <label htmlFor="email" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
               Email
             </label>
             <input
@@ -75,13 +87,13 @@ function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-lg focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+              className="w-full rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 text-[color:var(--app-fg)] placeholder:text-[color:var(--app-muted)] focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               placeholder="example@email.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-2 block text-base font-medium text-slate-700">
+            <label htmlFor="password" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
               Пароль
             </label>
             <div className="relative">
@@ -91,56 +103,55 @@ function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-24 text-lg focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
-                placeholder="Введите пароль"
+                className="w-full rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 pr-24 text-[color:var(--app-fg)] placeholder:text-[color:var(--app-muted)] focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                placeholder="••••••••"
               />
               <button
                 type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-base font-medium text-slate-500 hover:text-slate-700"
+                onClick={() => setShowPassword((p) => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]"
               >
                 {showPassword ? 'Скрыть' : 'Показать'}
               </button>
             </div>
           </div>
 
-          <button
+          <motion.button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-3 text-xl font-semibold text-white shadow-lg transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+            whileHover={{ scale: loading ? 1 : 1.02 }}
+            whileTap={{ scale: loading ? 1 : 0.98 }}
+            className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? 'Вход...' : 'Войти'}
-          </button>
+            {loading ? 'Вход…' : 'Войти'}
+          </motion.button>
         </form>
 
-        <div className="my-6 flex items-center gap-3 text-sm text-slate-400">
-          <div className="h-px flex-1 bg-slate-200" />
+        <div className="my-8 flex items-center gap-3 text-xs text-[color:var(--app-muted)]">
+          <div className="h-px flex-1 bg-[color:var(--app-border)]" />
           или
-          <div className="h-px flex-1 bg-slate-200" />
+          <div className="h-px flex-1 bg-[color:var(--app-border)]" />
         </div>
 
         <button
           type="button"
-          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-xl font-medium text-slate-700 transition hover:bg-slate-50"
+          disabled
+          title="Скоро"
+          className="w-full cursor-not-allowed rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 text-sm font-medium text-[color:var(--app-muted)] opacity-60"
         >
-          Войти через Google
+          Google — скоро
         </button>
 
-        <div className="mt-6 text-center">
-          <p className="text-base text-slate-600">
-            Нет аккаунта?{' '}
-            <Link to="/register" className="font-semibold text-violet-700 hover:text-violet-800">
-              Зарегистрироваться
-            </Link>
-          </p>
-          <p className="mt-4 text-sm text-slate-500">Тестовый пользователь: `nurkhan@example.com` / пароль `12345678`</p>
-        </div>
-      </div>
+        <p className="mt-8 text-center text-sm text-[color:var(--app-muted)]">
+          Нет аккаунта?{' '}
+          <Link to="/register" className="font-semibold text-violet-400 hover:text-violet-300">
+            Регистрация
+          </Link>
+        </p>
+        <p className="mt-4 text-center text-xs text-[color:var(--app-muted)]">
+          Демо: <span className="text-[color:var(--app-fg)]">demo@example.com</span> / demo12345 · или nurkhan@example.com / 12345678
+        </p>
+      </motion.div>
     </div>
   )
 }
-
-export default Login
-
-
-

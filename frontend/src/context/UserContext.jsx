@@ -7,19 +7,37 @@ export function UserProvider({ children }) {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
 
-  const fetchMe = useCallback(async () => {
-    if (!token) return null
+  const clearSession = useCallback(() => {
+    setToken(null)
+    setUser(null)
+    try {
+      localStorage.removeItem('token')
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
-    const response = await fetch('/api/auth/me', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
+  const fetchMe = useCallback(
+    async (authToken) => {
+      const tok = authToken ?? token
+      if (!tok) return null
 
-    if (!response.ok) return null
-    const data = await response.json()
-    return data.user
-  }, [token])
+      const response = await fetch('/api/auth/me', {
+        headers: {
+          Authorization: `Bearer ${tok}`,
+        },
+      })
+
+      if (response.status === 401) {
+        clearSession()
+        return null
+      }
+      if (!response.ok) return null
+      const data = await response.json()
+      return data.user
+    },
+    [token, clearSession]
+  )
 
   useEffect(() => {
     let mounted = true
@@ -30,10 +48,10 @@ export function UserProvider({ children }) {
           if (mounted) setUser(null)
           return
         }
-        const me = await fetchMe()
+        const me = await fetchMe(token)
         if (mounted) setUser(me)
-      } catch (e) {
-        // ignore
+      } catch {
+        if (mounted) setUser(null)
       } finally {
         if (mounted) setAuthLoading(false)
       }
@@ -47,21 +65,29 @@ export function UserProvider({ children }) {
 
   const login = (nextToken, nextUser) => {
     setToken(nextToken)
-    localStorage.setItem('token', nextToken)
+    try {
+      localStorage.setItem('token', nextToken)
+    } catch {
+      /* ignore */
+    }
     if (nextUser) setUser(nextUser)
   }
 
   const logout = () => {
-    setToken(null)
-    setUser(null)
-    localStorage.removeItem('token')
+    clearSession()
   }
+
+  const refreshUser = useCallback(async () => {
+    const me = await fetchMe()
+    setUser(me)
+  }, [fetchMe])
 
   return (
     <UserContext.Provider
       value={{
         token,
         user,
+        setUser,
         userId: user?.id ?? null,
         userName: user?.name ?? null,
         avatar: user?.avatar ?? null,
@@ -69,6 +95,7 @@ export function UserProvider({ children }) {
         authLoading,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}
@@ -83,6 +110,3 @@ export function useUser() {
   }
   return context
 }
-
-
-

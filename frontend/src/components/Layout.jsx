@@ -1,63 +1,209 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../context/UserContext'
+import { useTheme } from '../context/ThemeContext'
+
+const navCls = ({ isActive }) =>
+  `text-sm font-semibold transition ${
+    isActive ? 'text-violet-400' : 'text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]'
+  }`
 
 function Layout({ children }) {
+  const location = useLocation()
+  const [mobileOpen, setMobileOpen] = useState(false)
   const { userId, userName, logout, authLoading } = useUser()
+  const { theme, toggleTheme } = useTheme()
   const userInitial = (userName || 'U').slice(0, 1).toUpperCase()
 
   return (
-    <div className="min-h-screen bg-[#efedf7]">
-      <nav className="sticky top-0 z-30 border-b border-[#e7e4f2] bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-500 text-sm text-white shadow">
+    <div className="mesh-bg min-h-screen">
+      <nav className="sticky top-0 z-40 border-b border-[color:var(--app-border)] backdrop-blur-xl" style={{ background: 'var(--nav-bg)' }}>
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-4 md:gap-8">
+            <Link to="/" className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3" onClick={() => setMobileOpen(false)}>
+              <motion.span
+                layout
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm text-white shadow-lg shadow-violet-500/30"
+                whileHover={{ rotate: 6, scale: 1.05 }}
+              >
                 🧠
-              </span>
-              <span className="text-xl font-bold text-slate-900">AI-тренажер ЕНТ</span>
+              </motion.span>
+              <span className="truncate text-lg font-extrabold tracking-tight text-[color:var(--app-fg)] sm:text-xl">AI-тренажер ЕНТ</span>
             </Link>
 
-            <div className="hidden items-center gap-7 md:flex">
-              <Link to="/" className="text-sm font-semibold text-slate-700 hover:text-violet-700">Главная</Link>
-              <Link to="/test" className="text-sm font-semibold text-slate-700 hover:text-violet-700">Тесты</Link>
-              <Link to="/progress" className="text-sm font-semibold text-slate-700 hover:text-violet-700">Прогресс</Link>
-              <Link to="/prediction" className="text-sm font-semibold text-slate-700 hover:text-violet-700">Прогноз</Link>
-              <a href="/#about" className="text-sm font-semibold text-slate-700 hover:text-violet-700">О проекте</a>
+            <div className="hidden items-center gap-5 md:flex lg:gap-6">
+              <NavLink to="/" className={navCls} end>
+                Главная
+              </NavLink>
+              {userId && (
+                <NavLink to="/dashboard" className={navCls}>
+                  Дашборд
+                </NavLink>
+              )}
+              <NavLink to="/test" className={navCls}>
+                Тесты
+              </NavLink>
+              <NavLink to="/progress" className={navCls}>
+                Прогресс
+              </NavLink>
+              <NavLink to="/prediction" className={navCls}>
+                Прогноз
+              </NavLink>
+              <a href="/#about" className="text-sm font-semibold text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]">
+                О проекте
+              </a>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileOpen((o) => !o)}
+              className="rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-2 text-sm font-semibold text-[color:var(--app-fg)] md:hidden"
+              aria-expanded={mobileOpen}
+              aria-label="Меню"
+            >
+              {mobileOpen ? '✕' : '☰'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-2.5 py-2 text-xs font-semibold text-[color:var(--app-fg)] transition hover:border-violet-400/40 sm:px-3"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             {authLoading ? (
-              <span className="text-sm text-slate-500">...</span>
+              <span className="hidden text-sm text-[color:var(--app-muted)] sm:inline">…</span>
             ) : userId ? (
               <>
                 <Link
                   to="/profile"
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-violet-600 to-indigo-500 text-sm font-bold text-white shadow"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-xs font-bold text-white shadow-md sm:h-10 sm:w-10 sm:text-sm"
+                  onClick={() => setMobileOpen(false)}
                 >
                   {userInitial}
                 </Link>
-                <button onClick={logout} className="text-sm font-medium text-slate-500 hover:text-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileOpen(false)
+                    logout()
+                  }}
+                  className="hidden rounded-xl px-3 py-2 text-sm font-medium text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)] sm:inline"
+                >
                   Выйти
                 </button>
               </>
             ) : (
               <Link
                 to="/login"
-                className="rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-5 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-105"
+                className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/25 sm:px-5 sm:text-sm"
+                onClick={() => setMobileOpen(false)}
               >
                 Войти
               </Link>
             )}
           </div>
         </div>
+
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="border-t border-[color:var(--app-border)] bg-[color:var(--nav-bg)] md:hidden"
+            >
+              <div className="flex flex-col gap-1 px-4 py-3">
+                <NavLink
+                  to="/"
+                  className={({ isActive }) =>
+                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
+                  }
+                  end
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Главная
+                </NavLink>
+                {userId && (
+                  <NavLink
+                    to="/dashboard"
+                    className={({ isActive }) =>
+                      `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
+                    }
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Дашборд
+                  </NavLink>
+                )}
+                <NavLink
+                  to="/test"
+                  className={({ isActive }) =>
+                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
+                  }
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Тесты
+                </NavLink>
+                <NavLink
+                  to="/progress"
+                  className={({ isActive }) =>
+                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
+                  }
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Прогресс
+                </NavLink>
+                <NavLink
+                  to="/prediction"
+                  className={({ isActive }) =>
+                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
+                  }
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Прогноз
+                </NavLink>
+                <a
+                  href="/#about"
+                  className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[color:var(--app-muted)]"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  О проекте
+                </a>
+                {userId && (
+                  <button
+                    type="button"
+                    className="rounded-xl px-3 py-2.5 text-left text-sm font-medium text-red-300/90"
+                    onClick={() => {
+                      setMobileOpen(false)
+                      logout()
+                    }}
+                  >
+                    Выйти
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {children}
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {children}
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   )
 }
 
 export default Layout
-

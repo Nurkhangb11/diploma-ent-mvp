@@ -73,6 +73,38 @@ func GenerateAIChatReply(message, question, correctAnswer, userAnswer string) (s
 	return callOpenAI(systemPrompt, userPrompt)
 }
 
+// GenerateWeeklyStudyPlan builds a structured weekly ENT study plan from analytics context.
+func GenerateWeeklyStudyPlan(analyticsContext, primarySubject string) (string, error) {
+	systemPrompt := `Ты AI-репетитор по подготовке к ЕНТ в Казахстане. Пиши только на русском языке.
+Отвечай кратко, структурировано, без воды. Тон — поддерживающий, понятный школьнику.
+Используй ТОЛЬКО факты из предоставленной аналитики. Не выдумывай темы и цифры, которых нет в данных.
+Если данных мало — честно скажи и предложи реалистичный минимум на неделю.
+
+Формат ответа (строго соблюдай):
+
+AI рекомендует на эту неделю:
+• (конкретная рекомендация 1)
+• (конкретная рекомендация 2)
+• (ещё 2–4 пункта с числами вопросов/задач где уместно)
+
+Ожидаемый рост прогноза:
++X–Y баллов
+
+Мотивация:
+(1–2 предложения)`
+
+	userPrompt := "Составь персональный план обучения на 7 дней.\n\n" + analyticsContext
+	if primarySubject != "" {
+		userPrompt += "\nСделай акцент на предмете: " + primarySubject + ", но учти все предметы из аналитики."
+	}
+
+	text, err := callOpenAI(systemPrompt, userPrompt)
+	if err != nil {
+		return "", err
+	}
+	return text, nil
+}
+
 func callOpenAI(systemPrompt, userPrompt string) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
@@ -91,7 +123,7 @@ func callOpenAI(systemPrompt, userPrompt string) (string, error) {
 			{Role: "user", Content: userPrompt},
 		},
 		Temperature: 0.25,
-		MaxTokens:   220,
+		MaxTokens:   maxTokensForPrompt(userPrompt),
 	}
 
 	body, err := json.Marshal(payload)
@@ -130,4 +162,11 @@ func callOpenAI(systemPrompt, userPrompt string) (string, error) {
 	}
 
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+}
+
+func maxTokensForPrompt(userPrompt string) int {
+	if strings.Contains(userPrompt, "план обучения на 7 дней") {
+		return 450
+	}
+	return 220
 }

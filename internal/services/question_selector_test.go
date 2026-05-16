@@ -93,7 +93,7 @@ func TestRepeatRespectsCooldown(t *testing.T) {
 		t.Fatalf("create attempts: %v", err)
 	}
 
-	_, meta, err := GetAdaptiveQuestion(userID)
+	_, meta, err := GetAdaptiveQuestion(userID, "S")
 	if err != nil {
 		t.Fatalf("GetAdaptiveQuestion failed: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestRepeatProbabilityApproximatelySeventyPercent(t *testing.T) {
 	total := 1000
 	repeatCount := 0
 	for i := 0; i < total; i++ {
-		_, meta, err := GetAdaptiveQuestion(userID)
+		_, meta, err := GetAdaptiveQuestion(userID, "S")
 		if err != nil {
 			t.Fatalf("GetAdaptiveQuestion failed: %v", err)
 		}

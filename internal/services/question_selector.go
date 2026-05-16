@@ -4,6 +4,7 @@ import (
 	"diploma-ent-mvp/internal/database"
 	"diploma-ent-mvp/internal/models"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
@@ -39,10 +40,15 @@ type subtopicStats struct {
 	Mastery   float64
 }
 
-func GetAdaptiveQuestion(userID uint) (models.Question, QuestionSelectionMeta, error) {
+// GetAdaptiveQuestion picks the next question for userID, optionally scoped to subject
+// (must match models.Question.Subject / subjects in seed, e.g. "История Казахстана").
+// If subject is empty, behavior matches the legacy global pool (all subjects).
+func GetAdaptiveQuestion(userID uint, subject string) (models.Question, QuestionSelectionMeta, error) {
 	seedRand()
 
-	latestAttemptsByQuestionID, questionsSinceLastByQuestionID, err := getLatestAttempts(userID)
+	subject = strings.TrimSpace(subject)
+
+	latestAttemptsByQuestionID, questionsSinceLastByQuestionID, err := getLatestAttempts(userID, subject)
 	if err != nil {
 		return models.Question{}, QuestionSelectionMeta{}, err
 	}
@@ -61,17 +67,20 @@ func GetAdaptiveQuestion(userID uint) (models.Question, QuestionSelectionMeta, e
 		}, nil
 	}
 
-	question, meta, err := getAdaptiveQuestionByMastery(latestAttemptsByQuestionID)
+	question, meta, err := getAdaptiveQuestionByMastery(latestAttemptsByQuestionID, subject)
 	if err != nil {
 		return models.Question{}, QuestionSelectionMeta{}, err
 	}
 	return question, meta, nil
 }
 
-func getLatestAttempts(userID uint) (map[uint]models.Attempt, map[uint]int, error) {
+func getLatestAttempts(userID uint, subject string) (map[uint]models.Attempt, map[uint]int, error) {
+	q := database.DB.Where("user_id = ?", userID)
+	if subject != "" {
+		q = q.Where("question_id IN (?)", database.DB.Model(&models.Question{}).Select("id").Where("subject = ?", subject))
+	}
 	var attempts []models.Attempt
-	if err := database.DB.
-		Where("user_id = ?", userID).
+	if err := q.
 		Order("created_at DESC, id DESC").
 		Find(&attempts).Error; err != nil {
 		return nil, nil, err
@@ -103,16 +112,19 @@ func getReadyRepeatQuestionIDs(latestAttemptsByQuestionID map[uint]models.Attemp
 	return ready
 }
 
-func getAdaptiveQuestionByMastery(latestAttemptsByQuestionID map[uint]models.Attempt) (models.Question, QuestionSelectionMeta, error) {
+func getAdaptiveQuestionByMastery(latestAttemptsByQuestionID map[uint]models.Attempt, subject string) (models.Question, QuestionSelectionMeta, error) {
+	q := database.DB.Model(&models.Subtopic{}).
+		Where("id IN (SELECT DISTINCT subtopic_id FROM questions WHERE subtopic_id IS NOT NULL)")
+	if subject != "" {
+		q = q.Where("id IN (SELECT DISTINCT subtopic_id FROM questions WHERE subtopic_id IS NOT NULL AND subject = ?)", subject)
+	}
 	var subtopics []models.Subtopic
-	if err := database.DB.
-		Where("id IN (SELECT DISTINCT subtopic_id FROM questions WHERE subtopic_id IS NOT NULL)").
-		Find(&subtopics).Error; err != nil {
+	if err := q.Find(&subtopics).Error; err != nil {
 		return models.Question{}, QuestionSelectionMeta{}, err
 	}
 
 	if len(subtopics) == 0 {
-		question, err := getRandomQuestion()
+		question, err := getRandomQuestion(subject)
 		if err != nil {
 			return models.Question{}, QuestionSelectionMeta{}, err
 		}
@@ -125,8 +137,12 @@ func getAdaptiveQuestionByMastery(latestAttemptsByQuestionID map[uint]models.Att
 	strong := make([]uint, 0)
 
 	for _, subtopic := range subtopics {
+		qq := database.DB.Where("subtopic_id = ?", subtopic.ID)
+		if subject != "" {
+			qq = qq.Where("subject = ?", subject)
+		}
 		var questions []models.Question
-		if err := database.DB.Where("subtopic_id = ?", subtopic.ID).Find(&questions).Error; err != nil {
+		if err := qq.Find(&questions).Error; err != nil {
 			return models.Question{}, QuestionSelectionMeta{}, err
 		}
 		if len(questions) == 0 {
@@ -159,7 +175,7 @@ func getAdaptiveQuestionByMastery(latestAttemptsByQuestionID map[uint]models.Att
 
 	selectedReason, selectedSubtopicID := pickSubtopicWithFallback(weak, medium, strong)
 	if selectedSubtopicID == 0 {
-		question, err := getRandomQuestion()
+		question, err := getRandomQuestion(subject)
 		if err != nil {
 			return models.Question{}, QuestionSelectionMeta{}, err
 		}
@@ -226,9 +242,13 @@ func pickSubtopicWithFallback(weak, medium, strong []uint) (string, uint) {
 	return last.reason, last.items[randomIntn(len(last.items))]
 }
 
-func getRandomQuestion() (models.Question, error) {
+func getRandomQuestion(subject string) (models.Question, error) {
+	q := database.DB.Order("RANDOM()")
+	if subject != "" {
+		q = q.Where("subject = ?", subject)
+	}
 	var question models.Question
-	if err := database.DB.Order("RANDOM()").First(&question).Error; err != nil {
+	if err := q.First(&question).Error; err != nil {
 		return models.Question{}, err
 	}
 	return question, nil

@@ -1,6 +1,9 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { UserProvider } from './context/UserContext'
+import { SubjectProvider } from './context/SubjectContext'
+import { ToastProvider } from './context/ToastContext'
 import Home from './pages/Home'
+import Dashboard from './pages/Dashboard'
 import Test from './pages/Test'
 import Progress from './pages/Progress'
 import Register from './pages/Register'
@@ -13,12 +16,22 @@ import Profile from './pages/Profile'
 function App() {
   return (
     <UserProvider>
-      <Router>
-        <Layout>
-          <Routes>
+      <SubjectProvider>
+        <ToastProvider>
+          <Router>
+            <Layout>
+              <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/test"
               element={
@@ -51,9 +64,11 @@ function App() {
                 </ProtectedRoute>
               }
             />
-          </Routes>
-        </Layout>
-      </Router>
+              </Routes>
+            </Layout>
+          </Router>
+        </ToastProvider>
+      </SubjectProvider>
     </UserProvider>
   )
 }
