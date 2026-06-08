@@ -1,0 +1,32 @@
+export default function Logo({ size = 36, className = '' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 48 48"
+      fill="none"
+      width={size}
+      height={size}
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M7 15C7 13.34 8.34 12 10 12H22V36H10C8.34 36 7 34.66 7 33V15Z" fill="#7C3AED" />
+      <path d="M41 15C41 13.34 39.66 12 38 12H26V36H38C39.66 36 41 34.66 41 33V15Z" fill="#A78BFA" />
+      <path
+        d="M7 15L24 21L41 15"
+        stroke="#E5E7EB"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <line x1="24" y1="12" x2="24" y2="36" stroke="#6B7280" strokeWidth="1.25" />
+      <path
+        d="M17 9C19.5 6 24 5 28.5 7.5C31 9 33.5 9.5 36 8.5"
+        stroke="#D1D5DB"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="36" cy="8.5" r="2.25" fill="#F9FAFB" />
+      <circle cx="36" cy="8.5" r="1" fill="#7C3AED" />
+    </svg>
+  )
+}
