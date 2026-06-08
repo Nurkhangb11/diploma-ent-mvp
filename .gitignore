@@ -1,3 +1,4 @@
 .env
 ent.db
 *.exe
+.backend-port

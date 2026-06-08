@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useUser } from '../context/UserContext'
 import { useSubject } from '../context/SubjectContext'
+import { useTranslation } from '../context/LanguageContext'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import GlassCard from '../components/GlassCard'
 import Spinner from '../components/Spinner'
+import { apiFetch, apiJsonBody } from '../lib/api'
+import { subjectLabel } from '../i18n'
 
 export default function Test() {
   const { userId, authLoading } = useUser()
   const { setSubject: setGlobalSubject } = useSubject()
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const [selectedSubject, setSelectedSubject] = useState('')
   const [question, setQuestion] = useState(null)
@@ -32,29 +36,21 @@ export default function Test() {
     if (!userId) navigate('/login')
   }, [authLoading, userId, navigate])
 
-  const subjectCards = [
-    {
-      id: 'math',
-      name: 'Математическая грамотность',
-      desc: 'Логика, базовые вычисления и практические задачи.',
-      count: 'Адаптивная серия',
-      icon: '🧮',
-    },
-    {
-      id: 'history',
-      name: 'История Казахстана',
-      desc: 'События, даты, личности и процессы.',
-      count: 'Адаптивная серия',
-      icon: '🏛️',
-    },
-    {
-      id: 'reading',
-      name: 'Грамотность чтения',
-      desc: 'Понимание и анализ текстов.',
-      count: 'Адаптивная серия',
-      icon: '📘',
-    },
-  ]
+  useEffect(() => {
+    if (selectedSubject && userId) {
+      fetchQuestion(selectedSubject)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locale])
+
+  const subjectCards = useMemo(
+    () => [
+      { key: 'Математическая грамотность', desc: t('test.mathDesc'), icon: '🧮' },
+      { key: 'История Казахстана', desc: t('test.historyDesc'), icon: '🏛️' },
+      { key: 'Грамотность чтения', desc: t('test.readingDesc'), icon: '📘' },
+    ],
+    [t, locale]
+  )
 
   const fetchQuestion = async (subjectOverride) => {
     const subjectParam = subjectOverride ?? selectedSubject
@@ -68,8 +64,9 @@ export default function Test() {
     setChatInput('')
     setChatError('')
     try {
-      const response = await fetch(
-        `/api/questions?user_id=${userId}&subject=${encodeURIComponent(subjectParam)}`
+      const response = await apiFetch(
+        `/api/questions?user_id=${userId}&subject=${encodeURIComponent(subjectParam)}`,
+        locale
       )
       const data = await response.json()
       if (data.length > 0) {
@@ -105,11 +102,14 @@ export default function Test() {
       const response = await fetch('/api/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          question_id: question.id,
-          user_answer: selectedAnswer,
-        }),
+        body: apiJsonBody(
+          {
+            user_id: userId,
+            question_id: question.id,
+            user_answer: selectedAnswer,
+          },
+          locale
+        ),
       })
 
       const data = await response.json()
@@ -149,19 +149,22 @@ export default function Test() {
       const response = await fetch('/api/ai-feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: question.question_text,
-          correct_answer: answerResult.correct_answer,
-          user_answer: selectedAnswer,
-          explanation: answerResult.explanation || '',
-        }),
+        body: apiJsonBody(
+          {
+            question: question.question_text,
+            correct_answer: answerResult.correct_answer,
+            user_answer: selectedAnswer,
+            explanation: answerResult.explanation || '',
+          },
+          locale
+        ),
       })
       if (!response.ok) throw new Error('AI feedback request failed')
       const data = await response.json()
       setAiFeedback(data.ai_feedback || '')
     } catch (error) {
       console.error('Error getting AI feedback:', error)
-      setAiFeedbackError('Не удалось получить подсказку от AI.')
+      setAiFeedbackError(t('test.aiFeedbackError'))
     } finally {
       setAiFeedbackLoading(false)
     }
@@ -171,9 +174,7 @@ export default function Test() {
     setChatOpen(true)
     setChatError('')
     if (chatMessages.length === 0) {
-      setChatMessages([
-        { role: 'ai', text: 'Разберём этот вопрос вместе. Что именно непонятно?' },
-      ])
+      setChatMessages([{ role: 'ai', text: t('test.chatIntro') }])
     }
   }
 
@@ -188,21 +189,24 @@ export default function Test() {
       const response = await fetch('/api/ai-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: trimmed,
-          context: {
-            question: question?.question_text || '',
-            correct_answer: result.correct_answer,
-            user_answer: selectedAnswer,
+        body: apiJsonBody(
+          {
+            message: trimmed,
+            context: {
+              question: question?.question_text || '',
+              correct_answer: result.correct_answer,
+              user_answer: selectedAnswer,
+            },
           },
-        }),
+          locale
+        ),
       })
       if (!response.ok) throw new Error('AI chat request failed')
       const data = await response.json()
-      setChatMessages((prev) => [...prev, { role: 'ai', text: data.reply || 'Не удалось получить ответ.' }])
+      setChatMessages((prev) => [...prev, { role: 'ai', text: data.reply || t('test.chatNoReply') }])
     } catch (error) {
       console.error('Error sending message to AI chat:', error)
-      setChatError('Ошибка отправки. Попробуйте снова.')
+      setChatError(t('test.chatSendError'))
     } finally {
       setChatLoading(false)
     }
@@ -227,16 +231,15 @@ export default function Test() {
       <div className="space-y-8">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-4xl font-extrabold tracking-tight text-[color:var(--app-fg)] md:text-5xl">
-            Выберите <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">предмет</span>
+            {t('test.chooseSubject')}{' '}
+            <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">{t('test.subjectAccent')}</span>
           </h1>
-          <p className="mt-3 max-w-2xl text-lg text-[color:var(--app-muted)]">
-            Адаптивная выдача вопросов и мгновенный разбор через AI.
-          </p>
+          <p className="mt-3 max-w-2xl text-lg text-[color:var(--app-muted)]">{t('test.chooseDesc')}</p>
         </motion.div>
         <div className="grid gap-5 md:grid-cols-3">
           {subjectCards.map((subject, i) => (
             <motion.div
-              key={subject.id}
+              key={subject.key}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08 * i }}
@@ -245,17 +248,17 @@ export default function Test() {
                 <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-2xl shadow-lg">
                   {subject.icon}
                 </div>
-                <h2 className="text-xl font-bold text-[color:var(--app-fg)]">{subject.name}</h2>
+                <h2 className="text-xl font-bold text-[color:var(--app-fg)]">{subjectLabel(locale, subject.key)}</h2>
                 <p className="mt-2 flex-1 text-sm text-[color:var(--app-muted)]">{subject.desc}</p>
-                <p className="mt-4 text-xs font-medium uppercase tracking-wide text-[color:var(--app-muted)]">{subject.count}</p>
+                <p className="mt-4 text-xs font-medium uppercase tracking-wide text-[color:var(--app-muted)]">{t('test.adaptiveSeries')}</p>
                 <motion.button
                   type="button"
-                  onClick={() => startTest(subject.name)}
+                  onClick={() => startTest(subject.key)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   className="mt-5 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/25"
                 >
-                  Начать
+                  {t('test.start')}
                 </motion.button>
               </GlassCard>
             </motion.div>
@@ -269,7 +272,7 @@ export default function Test() {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <Spinner />
-        <p className="text-sm text-[color:var(--app-muted)]">Подбираем вопрос…</p>
+        <p className="text-sm text-[color:var(--app-muted)]">{t('test.loading')}</p>
       </div>
     )
   }
@@ -277,13 +280,13 @@ export default function Test() {
   if (!question) {
     return (
       <GlassCard className="p-10 text-center">
-        <p className="text-[color:var(--app-muted)]">Вопросы не найдены</p>
+        <p className="text-[color:var(--app-muted)]">{t('test.notFound')}</p>
         <button
           type="button"
           onClick={() => setSelectedSubject('')}
           className="mt-6 rounded-xl border border-[color:var(--app-border)] px-6 py-2 text-sm font-semibold"
         >
-          Назад к предметам
+          {t('test.backToSubjects')}
         </button>
       </GlassCard>
     )
@@ -293,9 +296,9 @@ export default function Test() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-violet-400">Сессия</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-violet-400">{t('test.session')}</p>
           <p className="text-[color:var(--app-muted)]">
-            {selectedSubject} · вопрос <span className="font-semibold text-[color:var(--app-fg)]">#{sessionCount}</span>
+            {subjectLabel(locale, selectedSubject)} · {t('test.questionN', { n: sessionCount })}
           </p>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-[color:var(--app-card)] sm:max-w-xs">
@@ -353,7 +356,7 @@ export default function Test() {
                 whileHover={{ scale: submitting ? 1 : 1.02 }}
                 className="mt-8 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 font-semibold text-white shadow-lg disabled:opacity-50"
               >
-                {submitting ? 'Проверка…' : 'Ответить'}
+                {submitting ? t('test.checking') : t('test.submit')}
               </motion.button>
             )}
           </GlassCard>
@@ -395,29 +398,29 @@ export default function Test() {
                   {result.correct ? '✓' : '✗'}
                 </motion.div>
                 <h3 className={`text-2xl font-bold ${result.correct ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {result.correct ? 'Отлично!' : 'Почти — разберём ошибку'}
+                  {result.correct ? t('test.correctTitle') : t('test.wrongTitle')}
                 </h3>
                 <p className="mt-2 text-sm text-[color:var(--app-muted)]">
-                  {result.correct ? 'Так держать — переходи к следующему вопросу.' : 'Ниже правильный ответ и подсказка AI.'}
+                  {result.correct ? t('test.correctSub') : t('test.wrongSub')}
                 </p>
               </div>
 
               <div className="mt-6 rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-4 text-sm">
-                <span className="text-[color:var(--app-muted)]">Верный ответ:</span>
+                <span className="text-[color:var(--app-muted)]">{t('test.correctAnswer')}</span>
                 <p className="mt-1 font-semibold text-[color:var(--app-fg)]">{result.correct_answer}</p>
               </div>
 
               {result.explanation && (
                 <div className="mt-4 rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] p-4 text-sm text-[color:var(--app-fg)]">
-                  <span className="font-semibold text-[color:var(--app-muted)]">Комментарий: </span>
+                  <span className="font-semibold text-[color:var(--app-muted)]">{t('test.comment')} </span>
                   {result.explanation}
                 </div>
               )}
 
               {!result.correct && (
                 <div className="mt-4 rounded-2xl border border-violet-400/30 bg-violet-500/10 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-violet-300">AI-разбор</p>
-                  {aiFeedbackLoading && <p className="mt-2 animate-pulse text-sm text-violet-200">Анализ ответа…</p>}
+                  <p className="text-xs font-semibold uppercase tracking-wide text-violet-300">{t('test.aiReview')}</p>
+                  {aiFeedbackLoading && <p className="mt-2 animate-pulse text-sm text-violet-200">{t('test.aiAnalyzing')}</p>}
                   {!aiFeedbackLoading && aiFeedbackError && <p className="mt-2 text-sm text-red-300">{aiFeedbackError}</p>}
                   {!aiFeedbackLoading && !aiFeedbackError && aiFeedback && (
                     <p className="mt-2 text-sm leading-relaxed text-[color:var(--app-fg)]">{aiFeedback}</p>
@@ -432,7 +435,7 @@ export default function Test() {
                   whileHover={{ scale: 1.02 }}
                   className="flex-1 rounded-xl border border-[color:var(--app-border)] py-3 font-semibold text-[color:var(--app-fg)]"
                 >
-                  Обсудить с AI
+                  {t('test.discussAi')}
                 </motion.button>
                 <motion.button
                   type="button"
@@ -440,7 +443,7 @@ export default function Test() {
                   whileHover={{ scale: 1.02 }}
                   className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 font-semibold text-white shadow-lg"
                 >
-                  Дальше
+                  {t('test.next')}
                 </motion.button>
               </div>
             </motion.div>
@@ -460,9 +463,9 @@ export default function Test() {
             className="glass-panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-[color:var(--app-border)] shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-[color:var(--app-border)] px-5 py-4">
-              <h3 className="font-semibold text-[color:var(--app-fg)]">Обсуждение с AI</h3>
+              <h3 className="font-semibold text-[color:var(--app-fg)]">{t('test.chatTitle')}</h3>
               <button type="button" onClick={() => setChatOpen(false)} className="text-sm text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]">
-                Закрыть
+                {t('test.close')}
               </button>
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto bg-black/10 p-4">
@@ -482,7 +485,7 @@ export default function Test() {
               {chatLoading && (
                 <div className="flex justify-start">
                   <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-2 text-sm text-[color:var(--app-muted)]">
-                    Печатает…
+                    {t('test.typing')}
                   </div>
                 </div>
               )}
@@ -500,7 +503,7 @@ export default function Test() {
                       sendChatMessage()
                     }
                   }}
-                  placeholder="Вопрос по теме…"
+                  placeholder={t('test.chatPlaceholder')}
                   className="flex-1 rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-2.5 text-sm text-[color:var(--app-fg)] focus:border-violet-400/60 focus:outline-none"
                 />
                 <motion.button
@@ -510,7 +513,7 @@ export default function Test() {
                   whileTap={{ scale: 0.97 }}
                   className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  Отправить
+                  {t('test.send')}
                 </motion.button>
               </div>
             </div>

@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"diploma-ent-mvp/internal/locale"
 )
 
 const (
@@ -37,10 +39,15 @@ type openAIChatResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func GenerateAIFeedback(question, correctAnswer, userAnswer, explanation string) (string, error) {
+func aiSystemPrompt(role, loc string) string {
+	lang := locale.LanguageName(loc)
+	return fmt.Sprintf("%s Отвечай только на %s языке. Пиши коротко и понятно.", role, lang)
+}
+
+func GenerateAIFeedback(question, correctAnswer, userAnswer, explanation, loc string) (string, error) {
 	isCorrect := strings.TrimSpace(correctAnswer) == strings.TrimSpace(userAnswer)
 
-	systemPrompt := "Ты доброжелательный преподаватель для школьника. Отвечай только на русском языке. Пиши коротко и понятно, максимум 2-4 предложения. Используй только факты из предоставленного контекста, не придумывай новые данные."
+	systemPrompt := aiSystemPrompt("Ты доброжелательный преподаватель для школьника.", loc)
 	userPrompt := fmt.Sprintf(
 		"Сформируй краткую обратную связь по ответу ученика.\n"+
 			"Вопрос: %s\n"+
@@ -57,11 +64,11 @@ func GenerateAIFeedback(question, correctAnswer, userAnswer, explanation string)
 		isCorrect,
 	)
 
-	return callOpenAI(systemPrompt, userPrompt)
+	return callOpenAI(systemPrompt, userPrompt, maxTokensForPrompt(userPrompt))
 }
 
-func GenerateAIChatReply(message, question, correctAnswer, userAnswer string) (string, error) {
-	systemPrompt := "Ты преподаватель, который помогает школьнику понять тему и исправить ошибки. Отвечай только на русском языке, простыми словами, коротко и по делу. Используй только факты из контекста вопроса и ошибок; если контекста не хватает, честно скажи об этом."
+func GenerateAIChatReply(message, question, correctAnswer, userAnswer, loc string) (string, error) {
+	systemPrompt := aiSystemPrompt("Ты преподаватель, который помогает школьнику понять тему и исправить ошибки.", loc)
 	userPrompt := fmt.Sprintf(
 		"Контекст:\nВопрос: %s\nПравильный ответ: %s\nОтвет ученика: %s\n\nСообщение ученика: %s",
 		question,
@@ -70,42 +77,50 @@ func GenerateAIChatReply(message, question, correctAnswer, userAnswer string) (s
 		message,
 	)
 
-	return callOpenAI(systemPrompt, userPrompt)
+	return callOpenAI(systemPrompt, userPrompt, maxTokensForPrompt(userPrompt))
 }
 
 // GenerateWeeklyStudyPlan builds a structured weekly ENT study plan from analytics context.
-func GenerateWeeklyStudyPlan(analyticsContext, primarySubject string) (string, error) {
-	systemPrompt := `Ты AI-репетитор по подготовке к ЕНТ в Казахстане. Пиши только на русском языке.
+func GenerateWeeklyStudyPlan(analyticsContext, primarySubject, loc string) (string, error) {
+	recommend, growth, motivation := locale.WeeklyPlanSectionHeaders(loc)
+	lang := locale.LanguageName(loc)
+
+	systemPrompt := fmt.Sprintf(`Ты AI-репетитор по подготовке к ЕНТ в Казахстане. Пиши только на %s языке.
 Отвечай кратко, структурировано, без воды. Тон — поддерживающий, понятный школьнику.
 Используй ТОЛЬКО факты из предоставленной аналитики. Не выдумывай темы и цифры, которых нет в данных.
 Если данных мало — честно скажи и предложи реалистичный минимум на неделю.
 
 Формат ответа (строго соблюдай):
 
-AI рекомендует на эту неделю:
+%s
 • (конкретная рекомендация 1)
 • (конкретная рекомендация 2)
 • (ещё 2–4 пункта с числами вопросов/задач где уместно)
 
-Ожидаемый рост прогноза:
+%s
 +X–Y баллов
 
-Мотивация:
-(1–2 предложения)`
+%s
+(1–2 предложения)`, lang, recommend, growth, motivation)
 
 	userPrompt := "Составь персональный план обучения на 7 дней.\n\n" + analyticsContext
 	if primarySubject != "" {
 		userPrompt += "\nСделай акцент на предмете: " + primarySubject + ", но учти все предметы из аналитики."
 	}
 
-	text, err := callOpenAI(systemPrompt, userPrompt)
+	text, err := callOpenAI(systemPrompt, userPrompt, maxTokensForPrompt(userPrompt))
 	if err != nil {
 		return "", err
 	}
 	return text, nil
 }
 
-func callOpenAI(systemPrompt, userPrompt string) (string, error) {
+// CallOpenAIRaw exposes OpenAI for translation and other structured tasks.
+func CallOpenAIRaw(systemPrompt, userPrompt string, maxTokens int) (string, error) {
+	return callOpenAI(systemPrompt, userPrompt, maxTokens)
+}
+
+func callOpenAI(systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
 		return "", errors.New("OPENAI_API_KEY is not set")
@@ -123,7 +138,7 @@ func callOpenAI(systemPrompt, userPrompt string) (string, error) {
 			{Role: "user", Content: userPrompt},
 		},
 		Temperature: 0.25,
-		MaxTokens:   maxTokensForPrompt(userPrompt),
+		MaxTokens:   maxTokens,
 	}
 
 	body, err := json.Marshal(payload)
@@ -165,7 +180,7 @@ func callOpenAI(systemPrompt, userPrompt string) (string, error) {
 }
 
 func maxTokensForPrompt(userPrompt string) int {
-	if strings.Contains(userPrompt, "план обучения на 7 дней") {
+	if strings.Contains(userPrompt, "план обучения на 7 дней") || strings.Contains(userPrompt, "7 days") {
 		return 450
 	}
 	return 220

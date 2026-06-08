@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUser } from '../context/UserContext'
 import { useToast } from '../context/ToastContext'
+import { useTranslation } from '../context/LanguageContext'
 
 export default function Register() {
   const [name, setName] = useState('')
@@ -13,6 +14,7 @@ export default function Register() {
   const navigate = useNavigate()
   const { login } = useUser()
   const { showToast } = useToast()
+  const { t } = useTranslation()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -28,17 +30,17 @@ export default function Register() {
 
       const data = await response.json()
       if (!response.ok) {
-        const msg = typeof data?.error === 'string' ? data.error : 'Не удалось зарегистрироваться'
+        const msg = typeof data?.error === 'string' ? data.error : t('auth.registerFailed')
         setError(msg)
         showToast(msg, 'error')
         return
       }
 
       login(data.token, data.user)
-      showToast('Аккаунт создан', 'success')
+      showToast(t('auth.accountCreated'), 'success')
       navigate('/profile')
     } catch (err) {
-      const msg = 'Сеть недоступна или сервер не ответил'
+      const msg = t('auth.networkError')
       setError(msg)
       showToast(msg, 'error')
       console.error('Registration error:', err)
@@ -58,8 +60,8 @@ export default function Register() {
           <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-2xl shadow-lg">
             ✨
           </span>
-          <h2 className="mt-4 text-3xl font-extrabold text-[color:var(--app-fg)]">Создать аккаунт</h2>
-          <p className="mt-2 text-sm text-[color:var(--app-muted)]">Имя → профиль → цель → тренировки</p>
+          <h2 className="mt-4 text-3xl font-extrabold text-[color:var(--app-fg)]">{t('auth.createAccount')}</h2>
+          <p className="mt-2 text-sm text-[color:var(--app-muted)]">{t('auth.registerSub')}</p>
         </div>
 
         {error && (
@@ -69,7 +71,7 @@ export default function Register() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="name" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
-              Имя
+              {t('auth.name')}
             </label>
             <input
               type="text"
@@ -78,13 +80,13 @@ export default function Register() {
               onChange={(e) => setName(e.target.value)}
               required
               className="w-full rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 text-[color:var(--app-fg)] focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-              placeholder="Как к тебе обращаться"
+              placeholder={t('auth.namePlaceholder')}
             />
           </div>
 
           <div>
             <label htmlFor="email" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
-              Email
+              {t('auth.email')}
             </label>
             <input
               type="email"
@@ -99,7 +101,7 @@ export default function Register() {
 
           <div>
             <label htmlFor="password" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
-              Пароль
+              {t('auth.password')}
             </label>
             <input
               type="password"
@@ -108,7 +110,7 @@ export default function Register() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="w-full rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 text-[color:var(--app-fg)] focus:border-violet-400/60 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-              placeholder="Минимум надёжности на твоей совести"
+              placeholder={t('auth.passwordPlaceholder')}
             />
           </div>
 
@@ -119,14 +121,14 @@ export default function Register() {
             whileTap={{ scale: loading ? 1 : 0.98 }}
             className="mt-2 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 disabled:opacity-60"
           >
-            {loading ? 'Регистрация…' : 'Продолжить'}
+            {loading ? t('auth.registering') : t('auth.continue')}
           </motion.button>
         </form>
 
         <p className="mt-8 text-center text-sm text-[color:var(--app-muted)]">
-          Уже есть аккаунт?{' '}
+          {t('auth.hasAccount')}{' '}
           <Link to="/login" className="font-semibold text-violet-400 hover:text-violet-300">
-            Войти
+            {t('auth.login')}
           </Link>
         </p>
       </motion.div>

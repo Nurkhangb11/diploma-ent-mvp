@@ -3,6 +3,8 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../context/UserContext'
 import { useTheme } from '../context/ThemeContext'
+import { useTranslation } from '../context/LanguageContext'
+import LanguageSwitcher from './LanguageSwitcher'
 
 const navCls = ({ isActive }) =>
   `text-sm font-semibold transition ${
@@ -14,7 +16,16 @@ function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { userId, userName, logout, authLoading } = useUser()
   const { theme, toggleTheme } = useTheme()
+  const { t } = useTranslation()
   const userInitial = (userName || 'U').slice(0, 1).toUpperCase()
+
+  const navItems = [
+    { to: '/', label: t('nav.home'), end: true },
+    ...(userId ? [{ to: '/dashboard', label: t('nav.dashboard') }] : []),
+    { to: '/test', label: t('nav.tests') },
+    { to: '/progress', label: t('nav.progress') },
+    { to: '/prediction', label: t('nav.prediction') },
+  ]
 
   return (
     <div className="mesh-bg min-h-screen">
@@ -29,29 +40,17 @@ function Layout({ children }) {
               >
                 🧠
               </motion.span>
-              <span className="truncate text-lg font-extrabold tracking-tight text-[color:var(--app-fg)] sm:text-xl">AI-тренажер ЕНТ</span>
+              <span className="truncate text-lg font-extrabold tracking-tight text-[color:var(--app-fg)] sm:text-xl">{t('brand')}</span>
             </Link>
 
             <div className="hidden items-center gap-5 md:flex lg:gap-6">
-              <NavLink to="/" className={navCls} end>
-                Главная
-              </NavLink>
-              {userId && (
-                <NavLink to="/dashboard" className={navCls}>
-                  Дашборд
+              {navItems.map((item) => (
+                <NavLink key={item.to} to={item.to} className={navCls} end={item.end}>
+                  {item.label}
                 </NavLink>
-              )}
-              <NavLink to="/test" className={navCls}>
-                Тесты
-              </NavLink>
-              <NavLink to="/progress" className={navCls}>
-                Прогресс
-              </NavLink>
-              <NavLink to="/prediction" className={navCls}>
-                Прогноз
-              </NavLink>
+              ))}
               <a href="/#about" className="text-sm font-semibold text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]">
-                О проекте
+                {t('nav.about')}
               </a>
             </div>
           </div>
@@ -62,10 +61,11 @@ function Layout({ children }) {
               onClick={() => setMobileOpen((o) => !o)}
               className="rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-2 text-sm font-semibold text-[color:var(--app-fg)] md:hidden"
               aria-expanded={mobileOpen}
-              aria-label="Меню"
+              aria-label={t('nav.menu')}
             >
               {mobileOpen ? '✕' : '☰'}
             </button>
+            <LanguageSwitcher compact />
             <button
               type="button"
               onClick={toggleTheme}
@@ -92,7 +92,7 @@ function Layout({ children }) {
                   }}
                   className="hidden rounded-xl px-3 py-2 text-sm font-medium text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)] sm:inline"
                 >
-                  Выйти
+                  {t('nav.logout')}
                 </button>
               </>
             ) : (
@@ -101,7 +101,7 @@ function Layout({ children }) {
                 className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/25 sm:px-5 sm:text-sm"
                 onClick={() => setMobileOpen(false)}
               >
-                Войти
+                {t('nav.login')}
               </Link>
             )}
           </div>
@@ -117,60 +117,25 @@ function Layout({ children }) {
               className="border-t border-[color:var(--app-border)] bg-[color:var(--nav-bg)] md:hidden"
             >
               <div className="flex flex-col gap-1 px-4 py-3">
-                <NavLink
-                  to="/"
-                  className={({ isActive }) =>
-                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
-                  }
-                  end
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Главная
-                </NavLink>
-                {userId && (
+                {navItems.map((item) => (
                   <NavLink
-                    to="/dashboard"
+                    key={item.to}
+                    to={item.to}
                     className={({ isActive }) =>
                       `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
                     }
+                    end={item.end}
                     onClick={() => setMobileOpen(false)}
                   >
-                    Дашборд
+                    {item.label}
                   </NavLink>
-                )}
-                <NavLink
-                  to="/test"
-                  className={({ isActive }) =>
-                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
-                  }
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Тесты
-                </NavLink>
-                <NavLink
-                  to="/progress"
-                  className={({ isActive }) =>
-                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
-                  }
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Прогресс
-                </NavLink>
-                <NavLink
-                  to="/prediction"
-                  className={({ isActive }) =>
-                    `rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? 'bg-violet-500/15 text-violet-300' : 'text-[color:var(--app-fg)]'}`
-                  }
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Прогноз
-                </NavLink>
+                ))}
                 <a
                   href="/#about"
                   className="rounded-xl px-3 py-2.5 text-sm font-semibold text-[color:var(--app-muted)]"
                   onClick={() => setMobileOpen(false)}
                 >
-                  О проекте
+                  {t('nav.about')}
                 </a>
                 {userId && (
                   <button
@@ -181,7 +146,7 @@ function Layout({ children }) {
                       logout()
                     }}
                   >
-                    Выйти
+                    {t('nav.logout')}
                   </button>
                 )}
               </div>

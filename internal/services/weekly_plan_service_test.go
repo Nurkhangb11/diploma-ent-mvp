@@ -9,7 +9,7 @@ func TestExtractExpectedGrowth(t *testing.T) {
 Ожидаемый рост прогноза:
 +4–6 баллов`
 
-	got := extractExpectedGrowth(plan)
+	got := extractExpectedGrowth(plan, "ru")
 	if got != "+4–6" && got != "+4–6баллов" {
 		// regex may capture +4–6
 		if got == "" {
@@ -19,7 +19,7 @@ func TestExtractExpectedGrowth(t *testing.T) {
 }
 
 func TestExtractExpectedGrowthFallback(t *testing.T) {
-	got := extractExpectedGrowth("no growth here")
+	got := extractExpectedGrowth("no growth here", "ru")
 	if got != "+2–4 балла" {
 		t.Fatalf("got %q", got)
 	}

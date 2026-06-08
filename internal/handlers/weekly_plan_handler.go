@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/models"
 	"diploma-ent-mvp/internal/services"
 	"errors"
@@ -29,9 +30,10 @@ func GetWeeklyAIPlan(c *gin.Context) {
 	}
 
 	subject := c.DefaultQuery("subject", dashboardDefaultSubject)
+	loc := locale.Parse(c)
 	force := c.Query("force") == "true" || c.Query("force") == "1"
 
-	plan, err := services.GetWeeklyStudyPlan(userID, subject, force)
+	plan, err := services.GetWeeklyStudyPlan(userID, subject, loc, force)
 	if err != nil {
 		if errors.Is(err, services.ErrWeeklyPlanUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})

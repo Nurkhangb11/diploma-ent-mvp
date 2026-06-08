@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUser } from '../context/UserContext'
 import { useToast } from '../context/ToastContext'
+import { useTranslation } from '../context/LanguageContext'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -13,6 +14,7 @@ export default function Login() {
   const navigate = useNavigate()
   const { login } = useUser()
   const { showToast } = useToast()
+  const { t } = useTranslation()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -31,20 +33,20 @@ export default function Login() {
         const msg =
           typeof data?.error === 'string'
             ? data.error === 'invalid credentials'
-              ? 'Неверный email или пароль'
+              ? t('auth.invalidCredentials')
               : data.error
-            : 'Не удалось войти'
+            : t('auth.loginFailed')
         setError(msg)
         showToast(msg, 'error')
         return
       }
 
       login(data.token, data.user)
-      showToast('С возвращением!', 'success')
+      showToast(t('auth.welcomeToast'), 'success')
       if (data.user?.target_score > 0) navigate('/dashboard')
       else navigate('/profile')
     } catch (err) {
-      const msg = 'Сеть недоступна или сервер не ответил'
+      const msg = t('auth.networkError')
       setError(msg)
       showToast(msg, 'error')
       console.error('Login error:', err)
@@ -68,8 +70,8 @@ export default function Login() {
           >
             🧠
           </motion.span>
-          <h2 className="mt-5 text-3xl font-extrabold text-[color:var(--app-fg)]">С возвращением</h2>
-          <p className="mt-2 text-[color:var(--app-muted)]">Войди и продолжи серию 🔥</p>
+          <h2 className="mt-5 text-3xl font-extrabold text-[color:var(--app-fg)]">{t('auth.welcomeBack')}</h2>
+          <p className="mt-2 text-[color:var(--app-muted)]">{t('auth.welcomeSub')}</p>
         </div>
 
         {error && (
@@ -79,7 +81,7 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="email" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
-              Email
+              {t('auth.email')}
             </label>
             <input
               type="email"
@@ -94,7 +96,7 @@ export default function Login() {
 
           <div>
             <label htmlFor="password" className="mb-2 block text-sm font-medium text-[color:var(--app-fg)]">
-              Пароль
+              {t('auth.password')}
             </label>
             <div className="relative">
               <input
@@ -111,7 +113,7 @@ export default function Login() {
                 onClick={() => setShowPassword((p) => !p)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[color:var(--app-muted)] hover:text-[color:var(--app-fg)]"
               >
-                {showPassword ? 'Скрыть' : 'Показать'}
+                {showPassword ? t('auth.hide') : t('auth.show')}
               </button>
             </div>
           </div>
@@ -123,34 +125,32 @@ export default function Login() {
             whileTap={{ scale: loading ? 1 : 0.98 }}
             className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? 'Вход…' : 'Войти'}
+            {loading ? t('auth.loggingIn') : t('auth.login')}
           </motion.button>
         </form>
 
         <div className="my-8 flex items-center gap-3 text-xs text-[color:var(--app-muted)]">
           <div className="h-px flex-1 bg-[color:var(--app-border)]" />
-          или
+          {t('auth.or')}
           <div className="h-px flex-1 bg-[color:var(--app-border)]" />
         </div>
 
         <button
           type="button"
           disabled
-          title="Скоро"
+          title="Soon"
           className="w-full cursor-not-allowed rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-3 text-sm font-medium text-[color:var(--app-muted)] opacity-60"
         >
-          Google — скоро
+          {t('auth.googleSoon')}
         </button>
 
         <p className="mt-8 text-center text-sm text-[color:var(--app-muted)]">
-          Нет аккаунта?{' '}
+          {t('auth.noAccount')}{' '}
           <Link to="/register" className="font-semibold text-violet-400 hover:text-violet-300">
-            Регистрация
+            {t('auth.register')}
           </Link>
         </p>
-        <p className="mt-4 text-center text-xs text-[color:var(--app-muted)]">
-          Демо: <span className="text-[color:var(--app-fg)]">demo@example.com</span> / demo12345 · или nurkhan@example.com / 12345678
-        </p>
+        <p className="mt-4 text-center text-xs text-[color:var(--app-muted)]">{t('auth.demoHint')}</p>
       </motion.div>
     </div>
   )

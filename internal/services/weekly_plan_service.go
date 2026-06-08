@@ -2,9 +2,11 @@ package services
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/models"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -22,29 +24,25 @@ type WeeklyPlanResponse struct {
 	Cached         bool      `json:"cached"`
 }
 
-var expectedGrowthRe = regexp.MustCompile(`(?i)ожидаемый\s+рост[^+\d]*(\+\s*\d+\s*[–-]\s*\d+|\+\s*\d+)`)
+var expectedGrowthPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)ожидаемый\s+рост[^+\d]*(\+\s*\d+\s*[–-]\s*\d+|\+\s*\d+)`),
+	regexp.MustCompile(`(?i)expected\s+(?:score\s+)?growth[^+\d]*(\+\s*\d+\s*[–-]\s*\d+|\+\s*\d+)`),
+	regexp.MustCompile(`(?i)болжам[^+\d]*(\+\s*\d+\s*[–-]\s*\d+|\+\s*\d+)`),
+	regexp.MustCompile(`(?i)өсу[^+\d]*(\+\s*\d+\s*[–-]\s*\d+|\+\s*\d+)`),
+}
 
-// GetWeeklyStudyPlan returns a cached plan or generates a new one (max once per 7 days per user+subject).
-func GetWeeklyStudyPlan(userID uint, subject string, force bool) (*WeeklyPlanResponse, error) {
+// GetWeeklyStudyPlan returns a cached plan or generates a new one (max once per 7 days per user+subject+locale).
+func GetWeeklyStudyPlan(userID uint, subject string, loc string, force bool) (*WeeklyPlanResponse, error) {
 	subject = strings.TrimSpace(subject)
 	if subject == "" {
 		subject = "История Казахстана"
 	}
+	loc = locale.Normalize(loc)
 
 	now := time.Now().UTC()
 	if !force {
-		var existing models.WeeklyAIPlan
-		err := database.DB.Where("user_id = ? AND subject = ? AND expires_at > ?", userID, subject, now).
-			Order("generated_at DESC").
-			First(&existing).Error
-		if err == nil {
-			return &WeeklyPlanResponse{
-				PlanText:       existing.PlanText,
-				ExpectedGrowth: extractExpectedGrowth(existing.PlanText),
-				GeneratedAt:    existing.GeneratedAt,
-				ExpiresAt:      existing.ExpiresAt,
-				Cached:         true,
-			}, nil
+		if cached, ok := findCachedWeeklyPlan(userID, subject, loc, now); ok {
+			return cached, nil
 		}
 	}
 
@@ -53,83 +51,135 @@ func GetWeeklyStudyPlan(userID uint, subject string, force bool) (*WeeklyPlanRes
 		return nil, err
 	}
 
-	planText := generateWeeklyPlanText(analytics)
+	planText := generateWeeklyPlanText(analytics, loc)
 	if strings.TrimSpace(planText) == "" {
-		planText = fallbackWeeklyPlan(analytics)
+		planText = fallbackWeeklyPlan(analytics, loc)
 	}
 
 	generatedAt := now
 	expiresAt := generatedAt.Add(weeklyPlanDuration)
 
-	// Upsert: one active row per user+subject
-	database.DB.Where("user_id = ? AND subject = ?", userID, subject).Delete(&models.WeeklyAIPlan{})
+	database.DB.Where("user_id = ? AND subject = ? AND locale = ?", userID, subject, loc).Delete(&models.WeeklyAIPlan{})
 	row := models.WeeklyAIPlan{
 		UserID:      userID,
 		Subject:     subject,
+		Locale:      loc,
 		PlanText:    planText,
 		GeneratedAt: generatedAt,
 		ExpiresAt:   expiresAt,
 	}
 	if err := database.DB.Create(&row).Error; err != nil {
-		return nil, err
+		log.Printf("weekly plan cache save failed: %v", err)
 	}
 
 	return &WeeklyPlanResponse{
 		PlanText:       planText,
-		ExpectedGrowth: extractExpectedGrowth(planText),
+		ExpectedGrowth: extractExpectedGrowth(planText, loc),
 		GeneratedAt:    generatedAt,
 		ExpiresAt:      expiresAt,
 		Cached:         false,
 	}, nil
 }
 
-func generateWeeklyPlanText(analytics *WeeklyPlanAnalytics) string {
+func generateWeeklyPlanText(analytics *WeeklyPlanAnalytics, loc string) string {
 	if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) != "" {
-		text, err := GenerateWeeklyStudyPlan(analytics.FormatForPrompt(), analytics.PrimarySubject)
+		subjectLabel := locale.TranslateSubjectName(analytics.PrimarySubject, loc)
+		text, err := GenerateWeeklyStudyPlan(analytics.FormatForPrompt(), subjectLabel, loc)
 		if err == nil && strings.TrimSpace(text) != "" {
 			return strings.TrimSpace(text)
 		}
 	}
-	return fallbackWeeklyPlan(analytics)
+	return fallbackWeeklyPlan(analytics, loc)
 }
 
-func fallbackWeeklyPlan(a *WeeklyPlanAnalytics) string {
+func fallbackWeeklyPlan(a *WeeklyPlanAnalytics, loc string) string {
 	var b strings.Builder
-	b.WriteString("AI рекомендует на эту неделю:\n")
+	b.WriteString(locale.FallbackWeeklyPlanIntro(loc))
+	b.WriteString("\n")
 	for _, s := range a.Subjects {
 		n := 10
 		if s.WeakMastery < 0.4 {
 			n = 15
 		}
-		if s.WeakSection != "" {
-			fmt.Fprintf(&b, "• %d вопросов по слабой теме «%s» (%s)\n", n, s.WeakSection, s.Subject)
-		} else {
-			fmt.Fprintf(&b, "• %d вопросов по предмету «%s»\n", n, s.Subject)
-		}
+		b.WriteString(locale.FallbackWeeklyPlanQuestionLine(n, s.WeakSection, s.Subject, loc))
+		b.WriteString("\n")
 	}
 	if len(a.RepeatMistakes) > 0 {
-		b.WriteString("• Повтор ошибок по темам из списка повторов\n")
+		switch locale.Normalize(loc) {
+		case locale.KK:
+			b.WriteString("• Қателерді қайталау тізіміндегі тақырыптар\n")
+		case locale.EN:
+			b.WriteString("• Review mistakes from your error list\n")
+		default:
+			b.WriteString("• Повтор ошибок по темам из списка повторов\n")
+		}
 	}
-	b.WriteString("\nОжидаемый рост прогноза:\n+2–4 балла\n\n")
+	_, growth, _ := locale.WeeklyPlanSectionHeaders(loc)
+	b.WriteString("\n")
+	b.WriteString(growth)
+	b.WriteString("\n")
+	b.WriteString(locale.DefaultExpectedGrowth(loc))
+	b.WriteString("\n\n")
 	if a.StreakCurrent > 0 {
-		fmt.Fprintf(&b, "Отличный streak %d дн. — продолжай в том же темпе!\n", a.StreakCurrent)
+		switch locale.Normalize(loc) {
+		case locale.KK:
+			fmt.Fprintf(&b, "Керемет streak %d күн — сол темпті жалғастыр!\n", a.StreakCurrent)
+		case locale.EN:
+			fmt.Fprintf(&b, "Great %d-day streak — keep it up!\n", a.StreakCurrent)
+		default:
+			fmt.Fprintf(&b, "Отличный streak %d дн. — продолжай в том же темпе!\n", a.StreakCurrent)
+		}
 	} else {
-		b.WriteString("Начни с короткой сессии сегодня — 10–15 минут уже дадут прогресс.\n")
+		switch locale.Normalize(loc) {
+		case locale.KK:
+			b.WriteString("Бүгін қысқа сессиядан баста — 10–15 минут прогресс береді.\n")
+		case locale.EN:
+			b.WriteString("Start with a short session today — 10–15 minutes already helps.\n")
+		default:
+			b.WriteString("Начни с короткой сессии сегодня — 10–15 минут уже дадут прогресс.\n")
+		}
 	}
 	return b.String()
 }
 
-func extractExpectedGrowth(planText string) string {
-	if m := expectedGrowthRe.FindStringSubmatch(planText); len(m) > 1 {
-		return strings.ReplaceAll(strings.TrimSpace(m[1]), " ", "")
+func extractExpectedGrowth(planText, loc string) string {
+	for _, re := range expectedGrowthPatterns {
+		if m := re.FindStringSubmatch(planText); len(m) > 1 {
+			return strings.ReplaceAll(strings.TrimSpace(m[1]), " ", "")
+		}
 	}
 	for _, line := range strings.Split(planText, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.Contains(line, "+") && (strings.Contains(line, "балл") || strings.Contains(line, "рост")) {
+		if strings.Contains(line, "+") && (strings.Contains(strings.ToLower(line), "балл") || strings.Contains(strings.ToLower(line), "point") || strings.Contains(strings.ToLower(line), "рост") || strings.Contains(strings.ToLower(line), "growth") || strings.Contains(strings.ToLower(line), "өсу")) {
 			return line
 		}
 	}
-	return "+2–4 балла"
+	return locale.DefaultExpectedGrowth(loc)
+}
+
+func findCachedWeeklyPlan(userID uint, subject, loc string, now time.Time) (*WeeklyPlanResponse, bool) {
+	var existing models.WeeklyAIPlan
+	err := database.DB.Where("user_id = ? AND subject = ? AND locale = ? AND expires_at > ?", userID, subject, loc, now).
+		Order("generated_at DESC").
+		First(&existing).Error
+	if err != nil {
+		// Reuse Russian plan when locale-specific cache is missing (e.g. after i18n migration).
+		if loc != locale.RU {
+			err = database.DB.Where("user_id = ? AND subject = ? AND locale = ? AND expires_at > ?", userID, subject, locale.RU, now).
+				Order("generated_at DESC").
+				First(&existing).Error
+		}
+		if err != nil {
+			return nil, false
+		}
+	}
+	return &WeeklyPlanResponse{
+		PlanText:       existing.PlanText,
+		ExpectedGrowth: extractExpectedGrowth(existing.PlanText, loc),
+		GeneratedAt:    existing.GeneratedAt,
+		ExpiresAt:      existing.ExpiresAt,
+		Cached:         true,
+	}, true
 }
 
 // ErrWeeklyPlanUserNotFound when user does not exist.

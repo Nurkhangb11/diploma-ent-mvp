@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/i18n"
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/models"
-	"encoding/json"
+	"diploma-ent-mvp/internal/services"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -35,10 +37,10 @@ func GetProgress(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists, create if not
+	loc := locale.Parse(c)
+
 	var user models.User
 	if err := database.DB.First(&user, uint(userID)).Error; err != nil {
-		// User doesn't exist, create a new one with unique email
 		user = models.User{
 			ID:          uint(userID),
 			Name:        "User",
@@ -51,7 +53,6 @@ func GetProgress(c *gin.Context) {
 		}
 	}
 
-	// Get all attempts for user
 	var attempts []models.Attempt
 	if err := database.DB.Where("user_id = ?", uint(userID)).Find(&attempts).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch attempts"})
@@ -62,40 +63,33 @@ func GetProgress(c *gin.Context) {
 	correctAnswers := 0
 	var wrongQuestions []WrongQuestion
 
-	// Process attempts
 	for _, attempt := range attempts {
 		if attempt.Correct {
 			correctAnswers++
 		} else {
-			// Get question details for wrong answers
 			var question models.Question
 			if err := database.DB.First(&question, attempt.QuestionID).Error; err == nil {
-				// Parse options JSON string to array
-				var options []string
-				if err := json.Unmarshal([]byte(question.Options), &options); err != nil {
-					options = []string{}
-				}
+				content := services.CachedQuestionLocale(&question, loc)
+				localized := i18n.ApplyContent(&question, content, loc)
 
 				wrongQuestion := WrongQuestion{
 					QuestionID:    question.ID,
-					QuestionText:  question.QuestionText,
-					Topic:         question.Topic,
-					Options:       options,
-					CorrectAnswer: question.CorrectAnswer,
-					Explanation:   question.Explanation,
+					QuestionText:  localized.QuestionText,
+					Topic:         locale.TranslateTopicName(localized.Topic, loc),
+					Options:       content.Options,
+					CorrectAnswer: i18n.LocalizedCorrectAnswer(&question, content),
+					Explanation:   localized.Explanation,
 				}
 				wrongQuestions = append(wrongQuestions, wrongQuestion)
 			}
 		}
 	}
 
-	// Calculate percentage
 	var percentage float64
 	if totalQuestions > 0 {
 		percentage = float64(correctAnswers) / float64(totalQuestions) * 100
 	}
 
-	// Return response
 	c.JSON(http.StatusOK, ProgressResponse{
 		TotalQuestions: totalQuestions,
 		CorrectAnswers: correctAnswers,

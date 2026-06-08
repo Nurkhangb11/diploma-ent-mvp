@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/services"
 	"net/http"
 	"strconv"
@@ -16,18 +17,19 @@ func GetPrediction(c *gin.Context) {
 		return
 	}
 
-	// Получить название предмета из query параметра (по умолчанию "История Казахстана")
 	subjectName := c.DefaultQuery("subject", "История Казахстана")
+	loc := locale.Parse(c)
 
-	// Рассчитать прогноз
 	result, err := services.CalculatePrediction(uint(userID), subjectName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate prediction"})
 		return
 	}
 
+	result.Message = locale.FormatPredictionMessage(result.ConfidenceLevel, loc)
+	for i := range result.SectionScores {
+		result.SectionScores[i].SectionName = locale.TranslateTopicName(result.SectionScores[i].SectionName, loc)
+	}
+
 	c.JSON(http.StatusOK, result)
 }
-
-
-

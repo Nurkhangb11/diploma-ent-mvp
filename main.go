@@ -3,6 +3,7 @@ package main
 import (
 	"diploma-ent-mvp/internal/database"
 	"diploma-ent-mvp/internal/routes"
+	"diploma-ent-mvp/internal/server"
 	"log"
 	"os"
 
@@ -34,8 +35,9 @@ func main() {
 		log.Println("OpenAI: not configured — create .env from .env.example and set OPENAI_API_KEY")
 	}
 
-	log.Println("Server starting on :8080")
-	if err := r.Run(":8080"); err != nil {
+	addr := server.ResolveAddr()
+	log.Println("Server starting on", addr)
+	if err := r.Run(addr); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }

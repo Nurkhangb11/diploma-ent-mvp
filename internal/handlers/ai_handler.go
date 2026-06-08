@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/services"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ type AIFeedbackRequest struct {
 	CorrectAnswer string `json:"correct_answer" binding:"required"`
 	UserAnswer    string `json:"user_answer" binding:"required"`
 	Explanation   string `json:"explanation"`
+	Lang          string `json:"lang"`
 }
 
 type AIFeedbackResponse struct {
@@ -22,6 +24,7 @@ type AIFeedbackResponse struct {
 
 type AIChatRequest struct {
 	Message string `json:"message" binding:"required"`
+	Lang    string `json:"lang"`
 	Context struct {
 		Question      string `json:"question"`
 		CorrectAnswer string `json:"correct_answer"`
@@ -40,7 +43,12 @@ func GetAIFeedback(c *gin.Context) {
 		return
 	}
 
-	feedback, err := services.GenerateAIFeedback(req.Question, req.CorrectAnswer, req.UserAnswer, req.Explanation)
+	loc := locale.Normalize(req.Lang)
+	if req.Lang == "" {
+		loc = locale.Parse(c)
+	}
+
+	feedback, err := services.GenerateAIFeedback(req.Question, req.CorrectAnswer, req.UserAnswer, req.Explanation, loc)
 	if err != nil {
 		if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI is not configured: OPENAI_API_KEY is missing"})
@@ -62,11 +70,17 @@ func ChatWithAI(c *gin.Context) {
 		return
 	}
 
+	loc := locale.Normalize(req.Lang)
+	if req.Lang == "" {
+		loc = locale.Parse(c)
+	}
+
 	reply, err := services.GenerateAIChatReply(
 		req.Message,
 		req.Context.Question,
 		req.Context.CorrectAnswer,
 		req.Context.UserAnswer,
+		loc,
 	)
 	if err != nil {
 		if strings.TrimSpace(os.Getenv("OPENAI_API_KEY")) == "" {

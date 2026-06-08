@@ -17,12 +17,16 @@ import {
 } from 'recharts'
 import GlassCard from '../components/GlassCard'
 import SubjectSwitcher from '../components/SubjectSwitcher'
+import { useTranslation } from '../context/LanguageContext'
+import { apiFetch, apiJsonBody } from '../lib/api'
 import Spinner from '../components/Spinner'
 import { predictionSubjectMax } from '../lib/subjectMax'
+import { subjectLabel } from '../i18n'
 
 export default function Prediction() {
   const { userId, userName, targetScore, authLoading } = useUser()
   const { subject, setSubject } = useSubject()
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const [prediction, setPrediction] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -36,12 +40,12 @@ export default function Prediction() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch(`/api/prediction/${userId}?subject=${encodeURIComponent(subject)}`)
+      const response = await apiFetch(`/api/prediction/${userId}?subject=${encodeURIComponent(subject)}`, locale)
       if (!response.ok) throw new Error('Failed to fetch prediction')
       const data = await response.json()
       setPrediction(data)
     } catch (err) {
-      setError('Ошибка при загрузке прогноза')
+      setError(t('prediction.loadError'))
       console.error('Prediction error:', err)
     } finally {
       setLoading(false)
@@ -55,7 +59,7 @@ export default function Prediction() {
       return
     }
     fetchPrediction()
-  }, [authLoading, userId, navigate, subject])
+  }, [authLoading, userId, navigate, subject, locale])
 
   useEffect(() => {
     if (!prediction?.section_scores?.length) return
@@ -68,19 +72,22 @@ export default function Prediction() {
         const res = await fetch('/api/ai-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: `Одно короткое предложение: что повторить для ЕНТ по теме «${weak.section_name}». Без новых фактов.`,
-            context: {
-              question: 'Рекомендация AI по прогнозу',
-              correct_answer: '',
-              user_answer: '',
+          body: apiJsonBody(
+            {
+              message: `Одно короткое предложение: что повторить для ЕНТ по теме «${weak.section_name}». Без новых фактов.`,
+              context: {
+                question: t('prediction.aiRecommend'),
+                correct_answer: '',
+                user_answer: '',
+              },
             },
-          }),
+            locale
+          ),
         })
         const j = await res.json()
         if (!cancelled && res.ok) setAiTip(j.reply || '')
       } catch {
-        if (!cancelled) setAiTip(`Имеет смысл уделить время теме «${weak.section_name}».`)
+        if (!cancelled) setAiTip(t('prediction.fallbackTip', { topic: weak.section_name }))
       } finally {
         if (!cancelled) setAiLoading(false)
       }
@@ -89,7 +96,7 @@ export default function Prediction() {
     return () => {
       cancelled = true
     }
-  }, [prediction, subject])
+  }, [prediction, subject, locale, t])
 
   const scoreOn120 = useMemo(() => {
     const p = prediction?.predicted_score ?? 0
@@ -113,24 +120,13 @@ export default function Prediction() {
     }))
   }, [prediction])
 
-  const confidenceLabel = (level) => {
-    switch (level) {
-      case 'high':
-        return 'Высокая'
-      case 'medium':
-        return 'Средняя'
-      case 'low':
-        return 'Низкая'
-      default:
-        return '—'
-    }
-  }
+  const confidenceLabel = (level) => t(`prediction.confidence.${level}`) || t('common.none')
 
   if (loading && !prediction) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <Spinner />
-        <p className="text-sm text-[color:var(--app-muted)]">Считаем прогноз…</p>
+        <p className="text-sm text-[color:var(--app-muted)]">{t('prediction.loading')}</p>
       </div>
     )
   }
@@ -140,7 +136,7 @@ export default function Prediction() {
       <GlassCard className="p-8 text-center">
         <p className="text-red-400">{error}</p>
         <button type="button" onClick={fetchPrediction} className="mt-4 text-violet-400 underline">
-          Повторить
+          {t('prediction.retry')}
         </button>
       </GlassCard>
     )
@@ -149,7 +145,7 @@ export default function Prediction() {
   if (!prediction) {
     return (
       <GlassCard className="p-10 text-center">
-        <p className="text-[color:var(--app-muted)]">Прогноз не найден</p>
+        <p className="text-[color:var(--app-muted)]">{t('prediction.notFound')}</p>
       </GlassCard>
     )
   }
@@ -159,10 +155,10 @@ export default function Prediction() {
   return (
     <div className="space-y-10">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <p className="text-sm text-[color:var(--app-muted)]">{userName ? `Привет, ${userName}` : 'Прогноз'}</p>
-        <h1 className="mt-1 text-4xl font-extrabold text-[color:var(--app-fg)] md:text-5xl">Твой прогноз</h1>
+        <p className="text-sm text-[color:var(--app-muted)]">{userName ? t('prediction.hello', { name: userName }) : t('prediction.title')}</p>
+        <h1 className="mt-1 text-4xl font-extrabold text-[color:var(--app-fg)] md:text-5xl">{t('prediction.title')}</h1>
         <div className="mt-6">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[color:var(--app-muted)]">Предмет</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[color:var(--app-muted)]">{t('prediction.subject')}</p>
           <SubjectSwitcher value={subject} onChange={setSubject} />
         </div>
       </motion.div>
@@ -186,25 +182,26 @@ export default function Prediction() {
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-5xl font-extrabold tabular-nums text-[color:var(--app-fg)]">{scoreOn120}</span>
-                <span className="text-sm text-[color:var(--app-muted)]">/ {target} цель</span>
+                <span className="text-sm text-[color:var(--app-muted)]">/ {target} {t('prediction.goal')}</span>
               </div>
             </div>
             <p className="mt-4 text-center text-sm text-[color:var(--app-muted)]">
-              Модель по предмету: <span className="font-semibold text-[color:var(--app-fg)]">{prediction.predicted_score.toFixed(1)}</span> / {subjectMax} · на шкале ЕНТ ≈{' '}
+              {t('prediction.modelBySubject')}{' '}
+              <span className="font-semibold text-[color:var(--app-fg)]">{prediction.predicted_score.toFixed(1)}</span> / {subjectMax} · {t('prediction.entApprox')}{' '}
               {scoreOn120} / 120
             </p>
           </div>
         </GlassCard>
 
         <GlassCard delay={0.08} className="p-8">
-          <h2 className="text-lg font-bold text-[color:var(--app-fg)]">Уверенность модели</h2>
+          <h2 className="text-lg font-bold text-[color:var(--app-fg)]">{t('prediction.confidenceTitle')}</h2>
           <div className="mt-6 flex items-end justify-between gap-4">
             <div>
               <p className="text-5xl font-extrabold text-emerald-400">{confPct}%</p>
               <p className="mt-1 text-sm font-medium text-[color:var(--app-muted)]">{confidenceLabel(prediction.confidence_level)}</p>
             </div>
             <span className="rounded-full border border-[color:var(--app-border)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--app-muted)]">
-              {prediction.confidence_level}
+              {confidenceLabel(prediction.confidence_level)}
             </span>
           </div>
           <div className="mt-6 h-3 w-full overflow-hidden rounded-full bg-black/10">
@@ -224,16 +221,16 @@ export default function Prediction() {
       </div>
 
       <GlassCard delay={0.1} className="p-6 md:p-8">
-        <h3 className="text-lg font-bold text-[color:var(--app-fg)]">AI рекомендация</h3>
+        <h3 className="text-lg font-bold text-[color:var(--app-fg)]">{t('prediction.aiRecommend')}</h3>
         <div className="mt-4 min-h-[3rem] rounded-2xl border border-violet-500/25 bg-violet-500/5 p-4">
-          {aiLoading && <p className="animate-pulse text-sm text-violet-300">Подбираем формулировку…</p>}
+          {aiLoading && <p className="animate-pulse text-sm text-violet-300">{t('prediction.aiLoading')}</p>}
           {!aiLoading && <p className="text-sm leading-relaxed text-[color:var(--app-fg)]">{aiTip}</p>}
         </div>
       </GlassCard>
 
       {masteryBars.length > 0 ? (
         <GlassCard delay={0.12} className="min-h-[320px] p-4 md:p-6">
-          <h3 className="mb-6 text-lg font-bold text-[color:var(--app-fg)]">Освоенность по секциям</h3>
+          <h3 className="mb-6 text-lg font-bold text-[color:var(--app-fg)]">{t('prediction.masterySections')}</h3>
           <div className="h-[280px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={masteryBars} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
@@ -246,7 +243,7 @@ export default function Prediction() {
                     border: '1px solid var(--app-border)',
                     borderRadius: 12,
                   }}
-                  formatter={(v) => [`${v}%`, 'mastery']}
+                  formatter={(v) => [`${v}%`, t('prediction.masteryTooltip')]}
                 />
                 <Bar dataKey="mastery" fill="url(#predBar)" radius={[8, 8, 0, 0]} />
                 <defs>
@@ -261,10 +258,8 @@ export default function Prediction() {
         </GlassCard>
       ) : (
         <GlassCard delay={0.12} className="p-8 text-center md:text-left">
-          <h3 className="text-lg font-bold text-[color:var(--app-fg)]">Mastery по секциям</h3>
-          <p className="mt-3 text-sm text-[color:var(--app-muted)]">
-            Пока недостаточно данных для графика по «{subject}». Пройди несколько вопросов в тренажёре — модель покажет освоенность по темам.
-          </p>
+          <h3 className="text-lg font-bold text-[color:var(--app-fg)]">{t('prediction.masterySections')}</h3>
+          <p className="mt-3 text-sm text-[color:var(--app-muted)]">{t('prediction.noData', { subject: subjectLabel(locale, subject) })}</p>
         </GlassCard>
       )}
 
@@ -276,7 +271,7 @@ export default function Prediction() {
           whileTap={{ scale: 0.98 }}
           className="rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-10 py-3 font-semibold text-white shadow-xl shadow-violet-500/30"
         >
-          Обновить прогноз
+          {t('prediction.refresh')}
         </motion.button>
       </div>
     </div>

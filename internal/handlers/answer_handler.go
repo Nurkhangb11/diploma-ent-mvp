@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/i18n"
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/models"
+	"diploma-ent-mvp/internal/services"
 	"fmt"
 	"net/http"
 	"strings"
@@ -14,12 +17,13 @@ type AnswerRequest struct {
 	UserID     uint   `json:"user_id" binding:"required"`
 	QuestionID uint   `json:"question_id" binding:"required"`
 	UserAnswer string `json:"user_answer" binding:"required"`
+	Lang       string `json:"lang"`
 }
 
 type AnswerResponse struct {
-	Correct      bool   `json:"correct"`
+	Correct       bool   `json:"correct"`
 	CorrectAnswer string `json:"correct_answer"`
-	Explanation  string `json:"explanation"`
+	Explanation   string `json:"explanation"`
 }
 
 func SubmitAnswer(c *gin.Context) {
@@ -29,10 +33,13 @@ func SubmitAnswer(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists, create if not
+	loc := locale.Normalize(req.Lang)
+	if loc == locale.RU && req.Lang == "" {
+		loc = locale.Parse(c)
+	}
+
 	var user models.User
 	if err := database.DB.First(&user, req.UserID).Error; err != nil {
-		// User doesn't exist, create a new one with unique email
 		user = models.User{
 			ID:          req.UserID,
 			Name:        "User",
@@ -45,21 +52,19 @@ func SubmitAnswer(c *gin.Context) {
 		}
 	}
 
-	// Get question
 	var question models.Question
 	if err := database.DB.First(&question, req.QuestionID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Question not found"})
 		return
 	}
 
-	// Check if answer is correct (trim whitespace and compare)
-	correct := strings.TrimSpace(question.CorrectAnswer) == strings.TrimSpace(req.UserAnswer)
+	content := services.EnsureQuestionLocale(&question, loc)
+	correct := i18n.IsAnswerCorrect(&question, content, req.UserAnswer)
 
-	// Create attempt record
 	attempt := models.Attempt{
 		UserID:     req.UserID,
 		QuestionID: req.QuestionID,
-		UserAnswer: req.UserAnswer,
+		UserAnswer: strings.TrimSpace(req.UserAnswer),
 		Correct:    correct,
 	}
 
@@ -70,8 +75,7 @@ func SubmitAnswer(c *gin.Context) {
 
 	c.JSON(http.StatusOK, AnswerResponse{
 		Correct:       correct,
-		CorrectAnswer: question.CorrectAnswer,
-		Explanation:   question.Explanation,
+		CorrectAnswer: i18n.LocalizedCorrectAnswer(&question, content),
+		Explanation:   content.Explanation,
 	})
 }
-

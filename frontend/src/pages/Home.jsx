@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useUser } from '../context/UserContext'
+import { useTranslation } from '../context/LanguageContext'
 import GlassCard from '../components/GlassCard'
 
 const fadeUp = {
@@ -10,14 +11,15 @@ const fadeUp = {
 
 export default function Home() {
   const { userId } = useUser()
+  const { t } = useTranslation()
 
   const capabilities = [
-    { title: 'Адаптивные тесты', desc: 'Вопросы подстраиваются под твой уровень.', icon: '🎯' },
-    { title: 'AI-разбор', desc: 'Объяснения ошибок и чат с наставником.', icon: '✨' },
-    { title: 'Прогноз балла', desc: 'Понятная модель прогресса и уверенности.', icon: '📈' },
-    { title: 'Дашборд', desc: 'Streak, уровень и слабые темы в одном месте.', icon: '🔥' },
-    { title: 'Темы ЕНТ', desc: 'История КЗ, математическая и читательская грамотность.', icon: '📚' },
-    { title: 'Цели', desc: 'Целевой балл и отслеживание пути к результату.', icon: '🏅' },
+    { title: t('home.features.adaptive.title'), desc: t('home.features.adaptive.desc'), icon: '🎯' },
+    { title: t('home.features.ai.title'), desc: t('home.features.ai.desc'), icon: '✨' },
+    { title: t('home.features.forecast.title'), desc: t('home.features.forecast.desc'), icon: '📈' },
+    { title: t('home.features.dashboard.title'), desc: t('home.features.dashboard.desc'), icon: '🔥' },
+    { title: t('home.features.topics.title'), desc: t('home.features.topics.desc'), icon: '📚' },
+    { title: t('home.features.goals.title'), desc: t('home.features.goals.desc'), icon: '🏅' },
   ]
 
   return (
@@ -32,14 +34,13 @@ export default function Home() {
         <div className="pointer-events-none absolute -right-16 bottom-0 h-64 w-64 rounded-full bg-fuchsia-500/20 blur-3xl" />
 
         <span className="relative inline-flex rounded-full border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-violet-400">
-          AI EdTech · ЕНТ
+          {t('home.badge')}
         </span>
         <h1 className="relative mt-6 text-4xl font-extrabold tracking-tight text-[color:var(--app-fg)] md:text-6xl md:leading-tight">
-          Готовься к ЕНТ <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">как в топовом приложении</span>
+          {t('home.title')}{' '}
+          <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">{t('home.titleAccent')}</span>
         </h1>
-        <p className="relative mx-auto mt-5 max-w-2xl text-lg text-[color:var(--app-muted)] md:text-xl">
-          Тренажёр с адаптивными вопросами, прогнозом результата и AI-подсказками — в интерфейсе уровня Linear и Duolingo.
-        </p>
+        <p className="relative mx-auto mt-5 max-w-2xl text-lg text-[color:var(--app-muted)] md:text-xl">{t('home.subtitle')}</p>
         <div className="relative mt-10 flex flex-wrap items-center justify-center gap-4">
           {userId ? (
             <>
@@ -47,13 +48,13 @@ export default function Home() {
                 to="/dashboard"
                 className="inline-flex rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 py-3.5 text-base font-semibold text-white shadow-xl shadow-violet-500/30 transition hover:brightness-110"
               >
-                Открыть дашборд
+                {t('home.openDashboard')}
               </Link>
               <Link
                 to="/test"
                 className="inline-flex rounded-2xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-8 py-3.5 text-base font-semibold text-[color:var(--app-fg)] transition hover:border-violet-400/40"
               >
-                Тренировка
+                {t('home.training')}
               </Link>
             </>
           ) : (
@@ -62,13 +63,13 @@ export default function Home() {
                 to="/register"
                 className="inline-flex rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 py-3.5 text-base font-semibold text-white shadow-xl shadow-violet-500/30 transition hover:brightness-110"
               >
-                Начать бесплатно
+                {t('home.startFree')}
               </Link>
               <Link
                 to="/login"
                 className="inline-flex rounded-2xl border border-[color:var(--app-border)] px-8 py-3.5 text-base font-semibold text-[color:var(--app-fg)] transition hover:border-violet-400/40"
               >
-                Уже есть аккаунт
+                {t('home.hasAccount')}
               </Link>
             </>
           )}
@@ -82,7 +83,7 @@ export default function Home() {
           viewport={{ once: true }}
           className="mb-8 text-center text-3xl font-bold text-[color:var(--app-fg)] md:text-4xl"
         >
-          Возможности платформы
+          {t('home.featuresTitle')}
         </motion.h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {capabilities.map((item, i) => (
@@ -106,10 +107,8 @@ export default function Home() {
         className="glass-panel rounded-3xl p-8 md:p-12"
       >
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-2xl font-bold text-[color:var(--app-fg)] md:text-3xl">Стек проекта</h2>
-          <p className="mt-3 text-[color:var(--app-muted)]">
-            Быстрый React + Tailwind на фронте, надёжный Go API на бэкенде — всё для стабильной подготовки к экзамену.
-          </p>
+          <h2 className="text-2xl font-bold text-[color:var(--app-fg)] md:text-3xl">{t('home.stackTitle')}</h2>
+          <p className="mt-3 text-[color:var(--app-muted)]">{t('home.stackDesc')}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             {['React', 'Vite', 'Tailwind', 'Framer Motion', 'Go', 'Gin', 'SQLite'].map((tag) => (
               <span
@@ -124,10 +123,8 @@ export default function Home() {
       </motion.section>
 
       <section id="about" className="text-center">
-        <h2 className="text-3xl font-bold text-[color:var(--app-fg)]">О проекте</h2>
-        <p className="mx-auto mt-4 max-w-2xl text-[color:var(--app-muted)]">
-          AI-тренажёр ЕНТ объединяет тестирование, аналитику и искусственный интеллект, чтобы ты видел прогресс и приходил на экзамен уверенным.
-        </p>
+        <h2 className="text-3xl font-bold text-[color:var(--app-fg)]">{t('home.aboutTitle')}</h2>
+        <p className="mx-auto mt-4 max-w-2xl text-[color:var(--app-muted)]">{t('home.aboutDesc')}</p>
       </section>
     </div>
   )

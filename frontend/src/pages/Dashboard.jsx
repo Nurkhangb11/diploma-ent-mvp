@@ -14,10 +14,13 @@ import {
 } from 'recharts'
 import { useUser } from '../context/UserContext'
 import { useSubject } from '../context/SubjectContext'
+import { useTranslation } from '../context/LanguageContext'
 import GlassCard from '../components/GlassCard'
 import SubjectSwitcher from '../components/SubjectSwitcher'
 import WeeklyStudyPlan from '../components/WeeklyStudyPlan'
 import { predictionSubjectMax } from '../lib/subjectMax'
+import { apiFetch } from '../lib/api'
+import { subjectLabel } from '../i18n'
 
 function aggregateWeeks(heatmap, weeks = 12) {
   const days = heatmap.slice(-7 * weeks)
@@ -42,6 +45,7 @@ function progressLineFromWeeks(weeks, predicted) {
 export default function Dashboard() {
   const { userId } = useUser()
   const { subject, setSubject } = useSubject()
+  const { t, locale } = useTranslation()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
@@ -51,16 +55,16 @@ export default function Dashboard() {
     setLoading(true)
     setErr('')
     try {
-      const res = await fetch(`/api/dashboard/${userId}?subject=${encodeURIComponent(subject)}`)
+      const res = await apiFetch(`/api/dashboard/${userId}?subject=${encodeURIComponent(subject)}`, locale)
       if (!res.ok) throw new Error('dashboard')
       const json = await res.json()
       setData(json)
     } catch (e) {
-      setErr('Не удалось загрузить дашборд')
+      setErr(t('dashboard.loadError'))
     } finally {
       setLoading(false)
     }
-  }, [userId, subject])
+  }, [userId, subject, locale])
 
   useEffect(() => {
     load()
@@ -105,10 +109,10 @@ export default function Dashboard() {
     const target = user?.target_score || 120
     const p20 = pred?.predicted_score ?? 0
     const ratio = target > 0 ? p20 / (target / 6) : 0
-    if (ratio >= 0.85) return `Отличный темп — ты всё ближе к ${target} баллам. Закрепи сильные темы короткими сериями.`
-    if (ratio >= 0.45) return `Ты уже ближе к ${target} баллам, чем вчера — добавь 10 минут на слабую тему.`
-    return `Каждый ответ приближает к ${target} баллам — начни с короткой сессии по слабой теме.`
-  }, [user?.target_score, pred?.predicted_score])
+    if (ratio >= 0.85) return t('dashboard.heroGreat', { target })
+    if (ratio >= 0.45) return t('dashboard.heroMid', { target })
+    return t('dashboard.heroStart', { target })
+  }, [user?.target_score, pred?.predicted_score, t])
 
   if (loading && !data) {
     return (
@@ -134,6 +138,9 @@ export default function Dashboard() {
   const predicted = pred?.predicted_score ?? 0
   const subjectMax = predictionSubjectMax(pred, subject)
   const confidencePct = Math.round((pred?.confidence || 0) * 100)
+  const confidenceLevelLabel = pred?.confidence_level
+    ? t(`prediction.confidence.${pred.confidence_level}`)
+    : t('common.none')
 
   return (
     <div className="space-y-10">
@@ -147,9 +154,9 @@ export default function Dashboard() {
 
         <div className="relative flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-wider text-violet-300/90">Дашборд</p>
+            <p className="text-sm font-medium uppercase tracking-wider text-violet-300/90">{t('dashboard.label')}</p>
             <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-[color:var(--app-fg)] md:text-5xl">
-              Привет, {user?.name || 'ученик'} <span className="inline-block animate-pulse">👋</span>
+              {t('dashboard.hello', { name: user?.name || t('dashboard.student') })} <span className="inline-block animate-pulse">👋</span>
             </h1>
             <p className="mt-3 max-w-xl text-lg text-[color:var(--app-muted)]">{heroSub}</p>
             <div className="mt-6">
@@ -167,16 +174,17 @@ export default function Dashboard() {
                 </div>
               )}
               <div>
-                <div className="text-xs text-[color:var(--app-muted)]">Уровень</div>
+                <div className="text-xs text-[color:var(--app-muted)]">{t('dashboard.level')}</div>
                 <div className="font-bold text-[color:var(--app-fg)]">{level.label}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-orange-200">
               <span className="text-2xl">🔥</span>
               <div>
-                <div className="text-xs text-orange-200/80">Streak</div>
+                <div className="text-xs text-orange-200/80">{t('dashboard.streak')}</div>
                 <div className="text-lg font-bold">
-                  {streak.current} дн. <span className="text-sm font-normal text-[color:var(--app-muted)]">· лучший {streak.best}</span>
+                  {t('dashboard.streakDays', { current: streak.current })}{' '}
+                  <span className="text-sm font-normal text-[color:var(--app-muted)]">{t('dashboard.streakBest', { best: streak.best })}</span>
                 </div>
               </div>
               {streak.badge && <span className="text-2xl">{streak.badge}</span>}
@@ -189,16 +197,14 @@ export default function Dashboard() {
         <GlassCard className="border border-violet-400/25 bg-gradient-to-br from-violet-500/10 to-fuchsia-500/5 p-6 md:p-8">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-[color:var(--app-fg)]">Начни с первого теста</h2>
-              <p className="mt-2 max-w-xl text-sm text-[color:var(--app-muted)]">
-                Как только появятся ответы, здесь оживут прогноз, mastery по секциям, streak и AI-инсайты — без «0%» и пустых графиков.
-              </p>
+              <h2 className="text-xl font-bold text-[color:var(--app-fg)]">{t('dashboard.startFirst')}</h2>
+              <p className="mt-2 max-w-xl text-sm text-[color:var(--app-muted)]">{t('dashboard.startFirstDesc')}</p>
             </div>
             <Link
               to="/test"
               className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30"
             >
-              Пройти тренировку
+              {t('dashboard.startTraining')}
             </Link>
           </div>
         </GlassCard>
@@ -206,37 +212,37 @@ export default function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <GlassCard delay={0.05}>
-          <p className="text-sm text-[color:var(--app-muted)]">Текущий прогноз</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.currentForecast')}</p>
           <p className="mt-2 text-4xl font-extrabold text-[color:var(--app-fg)]">
             {scoreOn120}{' '}
             <span className="text-lg font-semibold text-[color:var(--app-muted)]">/ 120</span>
           </p>
           <p className="mt-1 text-xs text-[color:var(--app-muted)]">
-            шкала ЕНТ · модель {predicted.toFixed(1)} / {subjectMax} по «{subject}»
+            {t('dashboard.entScale', { score: predicted.toFixed(1), max: subjectMax, subject: subjectLabel(locale, subject) })}
           </p>
         </GlassCard>
         <GlassCard delay={0.1}>
-          <p className="text-sm text-[color:var(--app-muted)]">Целевой балл</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.targetScore')}</p>
           <p className="mt-2 text-4xl font-extrabold text-[color:var(--app-fg)]">{target}</p>
-          <p className="mt-1 text-xs text-[color:var(--app-muted)]">в профиле</p>
+          <p className="mt-1 text-xs text-[color:var(--app-muted)]">{t('dashboard.inProfile')}</p>
         </GlassCard>
         <GlassCard delay={0.15}>
-          <p className="text-sm text-[color:var(--app-muted)]">Confidence</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.confidence')}</p>
           <p className="mt-2 text-4xl font-extrabold text-emerald-400">{confidencePct}%</p>
-          <p className="mt-1 text-xs text-[color:var(--app-muted)]">{pred?.confidence_level || '—'}</p>
+          <p className="mt-1 text-xs text-[color:var(--app-muted)]">{confidenceLevelLabel}</p>
         </GlassCard>
         <GlassCard delay={0.2}>
-          <p className="text-sm text-[color:var(--app-muted)]">Streak</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.streak')}</p>
           <p className="mt-2 text-4xl font-extrabold text-orange-400">{streak.current}</p>
-          <p className="mt-1 text-xs text-[color:var(--app-muted)]">дней подряд · best {streak.best}</p>
+          <p className="mt-1 text-xs text-[color:var(--app-muted)]">{t('dashboard.daysInRow', { best: streak.best })}</p>
         </GlassCard>
         <GlassCard delay={0.25}>
-          <p className="text-sm text-[color:var(--app-muted)]">Сильная тема</p>
-          <p className="mt-2 line-clamp-2 text-xl font-bold text-[color:var(--app-fg)]">{data?.topics?.strong || '—'}</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.strongTopic')}</p>
+          <p className="mt-2 line-clamp-2 text-xl font-bold text-[color:var(--app-fg)]">{data?.topics?.strong || t('common.none')}</p>
         </GlassCard>
         <GlassCard delay={0.3}>
-          <p className="text-sm text-[color:var(--app-muted)]">Слабая тема</p>
-          <p className="mt-2 line-clamp-2 text-xl font-bold text-[color:var(--app-fg)]">{data?.topics?.weak || '—'}</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.weakTopic')}</p>
+          <p className="mt-2 line-clamp-2 text-xl font-bold text-[color:var(--app-fg)]">{data?.topics?.weak || t('common.none')}</p>
         </GlassCard>
       </div>
 
@@ -262,13 +268,13 @@ export default function Dashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <GlassCard delay={0.4} className="min-h-[280px] p-4 md:p-6">
-          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">Mastery по секциям</h3>
+          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">{t('dashboard.masterySections')}</h3>
           {!hasMasteryChart ? (
             <div className="flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-dashed border-[color:var(--app-border)] bg-[color:var(--app-card)] p-6 text-center">
-              <p className="text-sm font-medium text-[color:var(--app-fg)]">Пока недостаточно данных по этому предмету</p>
-              <p className="mt-2 text-xs text-[color:var(--app-muted)]">Пройди тест по «{subject}», чтобы построить картину освоенности.</p>
+              <p className="text-sm font-medium text-[color:var(--app-fg)]">{t('dashboard.noMasteryData')}</p>
+              <p className="mt-2 text-xs text-[color:var(--app-muted)]">{t('dashboard.noMasteryHint', { subject: subjectLabel(locale, subject) })}</p>
               <Link to="/test" className="mt-4 text-sm font-semibold text-violet-400 hover:text-violet-300">
-                В тренажёр →
+                {t('dashboard.toTrainer')}
               </Link>
             </div>
           ) : (
@@ -296,7 +302,7 @@ export default function Dashboard() {
         </GlassCard>
 
         <GlassCard delay={0.45} className="min-h-[320px] p-4 md:p-6">
-          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">Динамика прогноза (оценка тренда)</h3>
+          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">{t('dashboard.forecastTrend')}</h3>
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={lineData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -306,7 +312,7 @@ export default function Dashboard() {
                 <Tooltip
                   contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12 }}
                 />
-                <Line type="monotone" dataKey="score" stroke="#c084fc" strokeWidth={3} dot={false} name="оценка тренда" />
+                <Line type="monotone" dataKey="score" stroke="#c084fc" strokeWidth={3} dot={false} name={t('dashboard.trendScore')} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -316,8 +322,8 @@ export default function Dashboard() {
       <GlassCard delay={0.5} className="p-6">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h3 className="text-lg font-bold text-[color:var(--app-fg)]">Активность</h3>
-            <p className="text-sm text-[color:var(--app-muted)]">GitHub-style: каждая строка — неделя (пн→вс)</p>
+            <h3 className="text-lg font-bold text-[color:var(--app-fg)]">{t('dashboard.activity')}</h3>
+            <p className="text-sm text-[color:var(--app-muted)]">{t('dashboard.activityHint')}</p>
           </div>
           <div className="flex gap-1.5 text-[10px] text-[color:var(--app-muted)]">
             <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-white/10 ring-1 ring-white/10" /> 0</span>
@@ -336,7 +342,7 @@ export default function Dashboard() {
                 return (
                   <motion.div
                     key={d.date}
-                    title={`${d.date}: ${c} ответов`}
+                    title={t('dashboard.answersCount', { date: d.date, count: c })}
                     initial={{ opacity: 0.6 }}
                     whileHover={{ scale: 1.25 }}
                     className={`h-3.5 w-3.5 shrink-0 rounded-[3px] ${level} ring-1 ring-black/10 dark:ring-white/10`}

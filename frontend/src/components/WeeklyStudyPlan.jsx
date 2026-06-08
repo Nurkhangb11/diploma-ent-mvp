@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from '../context/LanguageContext'
+import { apiFetch } from '../lib/api'
+import { subjectLabel } from '../i18n'
 import GlassCard from './GlassCard'
 
 function parsePlanSections(planText) {
@@ -13,15 +16,15 @@ function parsePlanSections(planText) {
 
   for (const line of lines) {
     const lower = line.toLowerCase()
-    if (lower.includes('ожидаемый рост')) {
+    if (lower.includes('ожидаемый рост') || lower.includes('expected') || lower.includes('өсу') || lower.includes('болжам')) {
       section = 'growth'
       continue
     }
-    if (lower.startsWith('мотивация')) {
+    if (lower.startsWith('мотивация') || lower.startsWith('motivation')) {
       section = 'motivation'
       continue
     }
-    if (lower.includes('ai рекомендует') || lower.includes('рекомендует на эту неделю')) {
+    if (lower.includes('ai рекомендует') || lower.includes('recommends') || lower.includes('ұсынады')) {
       section = 'bullets'
       continue
     }
@@ -36,16 +39,18 @@ function parsePlanSections(planText) {
   return { bullets, growth, motivation }
 }
 
-function formatDate(iso) {
+function formatDate(iso, locale) {
   if (!iso) return ''
+  const tag = locale === 'kk' ? 'kk-KZ' : locale === 'en' ? 'en-US' : 'ru-RU'
   try {
-    return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+    return new Date(iso).toLocaleDateString(tag, { day: 'numeric', month: 'short' })
   } catch {
     return ''
   }
 }
 
 export default function WeeklyStudyPlan({ userId, subject }) {
+  const { t, locale } = useTranslation()
   const [plan, setPlan] = useState(null)
   const [loading, setLoading] = useState(true)
   const [regenerating, setRegenerating] = useState(false)
@@ -60,7 +65,7 @@ export default function WeeklyStudyPlan({ userId, subject }) {
       try {
         const q = new URLSearchParams({ subject })
         if (force) q.set('force', 'true')
-        const res = await fetch(`/api/ai/weekly-plan/${userId}?${q}`)
+        const res = await apiFetch(`/api/ai/weekly-plan/${userId}?${q}`, locale)
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           const msg = data?.error || `HTTP ${res.status}`
@@ -76,13 +81,13 @@ export default function WeeklyStudyPlan({ userId, subject }) {
           e?.message?.includes('404') || e?.message?.includes('Failed to load')
             ? ' Перезапустите backend (go run main.go).'
             : ''
-        setError(`Не удалось загрузить план на неделю.${hint}`)
+        setError(t('weeklyPlan.loadError'))
       } finally {
         setLoading(false)
         setRegenerating(false)
       }
     },
-    [userId, subject]
+    [userId, subject, locale]
   )
 
   useEffect(() => {
@@ -90,8 +95,9 @@ export default function WeeklyStudyPlan({ userId, subject }) {
   }, [load])
 
   const sections = useMemo(() => parsePlanSections(plan?.plan_text), [plan?.plan_text])
-  const growth = plan?.expected_growth || sections.growth || '+2–4 балла'
-  const updatedLabel = plan?.generated_at ? formatDate(plan.generated_at) : ''
+  const growth = plan?.expected_growth || sections.growth || t('weeklyPlan.defaultGrowth')
+  const updatedLabel = plan?.generated_at ? formatDate(plan.generated_at, locale) : ''
+  const subjectDisplay = subjectLabel(locale, subject)
 
   return (
     <GlassCard
@@ -125,19 +131,19 @@ export default function WeeklyStudyPlan({ userId, subject }) {
         </motion.div>
         <motion.div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xl font-bold text-[color:var(--app-fg)]">План обучения на неделю</h2>
+            <h2 className="text-xl font-bold text-[color:var(--app-fg)]">{t('weeklyPlan.title')}</h2>
             <span className="rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-              Updated weekly
+              {t('weeklyPlan.badge')}
             </span>
             {plan?.cached && (
               <span className="rounded-full border border-[color:var(--app-border)] px-2 py-0.5 text-[10px] text-[color:var(--app-muted)]">
-                из кэша
+                {t('weeklyPlan.cached')}
               </span>
             )}
           </div>
           <p className="mt-1 text-sm text-[color:var(--app-muted)]">
-            Персональные рекомендации AI · предмет «{subject}»
-            {updatedLabel ? ` · обновлён ${updatedLabel}` : ''}
+            {t('weeklyPlan.subtitle', { subject: subjectDisplay })}
+            {updatedLabel ? ` ${t('weeklyPlan.updated', { date: updatedLabel })}` : ''}
           </p>
         </motion.div>
         <div className="flex shrink-0 gap-2">
@@ -149,13 +155,13 @@ export default function WeeklyStudyPlan({ userId, subject }) {
             onClick={() => load(true)}
             className="rounded-xl border border-violet-400/40 bg-violet-500/15 px-4 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50"
           >
-            {regenerating ? 'Обновляем…' : 'Обновить план'}
+            {regenerating ? t('weeklyPlan.refreshing') : t('weeklyPlan.refresh')}
           </motion.button>
           <Link
             to="/test"
             className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-500/30"
           >
-            В тренажёр
+            {t('weeklyPlan.toTrainer')}
           </Link>
         </div>
       </motion.div>
@@ -192,7 +198,16 @@ export default function WeeklyStudyPlan({ userId, subject }) {
         )}
 
         {error && !loading && (
-          <p className="text-sm text-red-400">{error}</p>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-red-400">{error}</p>
+            <button
+              type="button"
+              onClick={() => load(false)}
+              className="self-start rounded-xl border border-violet-400/40 px-4 py-2 text-xs font-semibold text-violet-200"
+            >
+              {t('prediction.retry')}
+            </button>
+          </div>
         )}
 
         <AnimatePresence mode="wait">
@@ -211,7 +226,7 @@ export default function WeeklyStudyPlan({ userId, subject }) {
                 transition={{ duration: 1.5, repeat: regenerating ? Infinity : 0 }}
               >
                 <p className="text-xs font-semibold uppercase tracking-wide text-violet-300/90">
-                  AI рекомендует на эту неделю
+                  {t('weeklyPlan.recommendTitle')}
                 </p>
                 <ul className="mt-3 space-y-2">
                   {(sections.bullets.length > 0 ? sections.bullets : plan.plan_text.split('\n').filter((l) => l.trim().startsWith('•'))).map(
@@ -237,7 +252,7 @@ export default function WeeklyStudyPlan({ userId, subject }) {
                 transition={{ delay: 0.15 }}
                 className="flex flex-wrap items-center gap-3 rounded-2xl border border-fuchsia-400/25 bg-fuchsia-500/10 px-5 py-4"
               >
-                <span className="text-sm text-[color:var(--app-muted)]">Ожидаемый рост прогноза:</span>
+                <span className="text-sm text-[color:var(--app-muted)]">{t('weeklyPlan.expectedGrowth')}</span>
                 <span className="text-2xl font-extrabold tabular-nums text-fuchsia-300">{growth}</span>
               </motion.div>
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/models"
 	"diploma-ent-mvp/internal/services"
 	"net/http"
@@ -26,6 +27,7 @@ type QuestionResponse struct {
 func GetRandomQuestion(c *gin.Context) {
 	userIDStr := c.Query("user_id")
 	subject := strings.TrimSpace(c.Query("subject"))
+	loc := locale.Parse(c)
 
 	var question models.Question
 	var meta services.QuestionSelectionMeta
@@ -59,13 +61,14 @@ func GetRandomQuestion(c *gin.Context) {
 	}
 
 	// Return question without correct_answer and explanation
+	localized := services.LocalizeQuestion(&question, loc)
 	response := QuestionResponse{
-		ID:                   question.ID,
-		Subject:              question.Subject,
-		Topic:                question.Topic,
-		QuestionText:         question.QuestionText,
-		Options:              question.Options,
-		SelectedSubtopicName: meta.SelectedSubtopicName,
+		ID:                   localized.ID,
+		Subject:              locale.TranslateSubjectName(localized.Subject, loc),
+		Topic:                locale.TranslateTopicName(localized.Topic, loc),
+		QuestionText:         localized.QuestionText,
+		Options:              localized.Options,
+		SelectedSubtopicName: locale.TranslateTopicName(meta.SelectedSubtopicName, loc),
 		QuestionsSinceLast:   meta.QuestionsSinceLast,
 		Reason:               meta.Reason,
 	}

@@ -35,6 +35,15 @@ func InitDB() {
 
 	log.Println("Database migrated successfully")
 
+	// Backfill locale for weekly plans created before i18n.
+	if DB.Migrator().HasTable(&models.WeeklyAIPlan{}) && DB.Migrator().HasColumn(&models.WeeklyAIPlan{}, "Locale") {
+		if err := DB.Model(&models.WeeklyAIPlan{}).
+			Where("locale IS NULL OR locale = ''").
+			Update("locale", "ru").Error; err != nil {
+			log.Printf("Weekly plan locale backfill skipped: %v", err)
+		}
+	}
+
 	// Flat questions first so *_kz.json refs can attach subtopic_id to existing rows.
 	SeedQuestions()
 
@@ -48,4 +57,7 @@ func InitDB() {
 	SeedDemoUser()
 
 	SyncSubjectENTMaxScores()
+
+	BackfillQuestionI18n()
+	BackfillCurriculumI18n()
 }

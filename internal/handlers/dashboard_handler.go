@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"diploma-ent-mvp/internal/database"
+	"diploma-ent-mvp/internal/locale"
 	"diploma-ent-mvp/internal/models"
 	"diploma-ent-mvp/internal/services"
 	"net/http"
@@ -43,6 +44,7 @@ func GetDashboard(c *gin.Context) {
 	}
 
 	subject := c.DefaultQuery("subject", dashboardDefaultSubject)
+	lang := locale.Parse(c)
 
 	var attempts []models.Attempt
 	if err := database.DB.Where("user_id = ?", userID).Order("created_at ASC").Find(&attempts).Error; err != nil {
@@ -81,26 +83,33 @@ func GetDashboard(c *gin.Context) {
 
 	pred, _ := services.CalculatePrediction(userID, subject)
 
-	var weakTopic, strongTopic string
-	var weakM, strongM float64
+	var weakTopicRU, strongTopicRU string
 	if pred != nil && len(pred.SectionScores) > 0 {
-		weakTopic = pred.SectionScores[0].SectionName
-		strongTopic = pred.SectionScores[0].SectionName
-		weakM = pred.SectionScores[0].Mastery
-		strongM = pred.SectionScores[0].Mastery
+		weakTopicRU = pred.SectionScores[0].SectionName
+		strongTopicRU = pred.SectionScores[0].SectionName
+		weakM := pred.SectionScores[0].Mastery
+		strongM := pred.SectionScores[0].Mastery
 		for _, s := range pred.SectionScores {
 			if s.Mastery < weakM {
 				weakM = s.Mastery
-				weakTopic = s.SectionName
+				weakTopicRU = s.SectionName
 			}
 			if s.Mastery > strongM {
 				strongM = s.Mastery
-				strongTopic = s.SectionName
+				strongTopicRU = s.SectionName
 			}
 		}
 	}
 
+	if pred != nil {
+		pred.Message = locale.FormatPredictionMessage(pred.ConfidenceLevel, lang)
+		for i := range pred.SectionScores {
+			pred.SectionScores[i].SectionName = locale.TranslateTopicName(pred.SectionScores[i].SectionName, lang)
+		}
+	}
+
 	level, levelLabel := userLevelFromAttempts(len(attempts), pred)
+	levelLabel = locale.LevelLabel(level, lang)
 
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{
@@ -109,7 +118,8 @@ func GetDashboard(c *gin.Context) {
 			"target_score": user.TargetScore,
 			"avatar":       user.Avatar,
 		},
-		"subject": subject,
+		"subject":     locale.TranslateSubjectName(subject, lang),
+		"subject_key": subject,
 		"streak": streakInfo{
 			Current: currentStreak,
 			Best:    bestStreak,
@@ -118,8 +128,8 @@ func GetDashboard(c *gin.Context) {
 		"heatmap":    heatmap,
 		"prediction": pred,
 		"topics": gin.H{
-			"weak":   weakTopic,
-			"strong": strongTopic,
+			"weak":   locale.TranslateTopicName(weakTopicRU, lang),
+			"strong": locale.TranslateTopicName(strongTopicRU, lang),
 		},
 		"level": gin.H{
 			"code":  level,

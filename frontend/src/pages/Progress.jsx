@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useUser } from '../context/UserContext'
 import { useSubject } from '../context/SubjectContext'
+import { useTranslation } from '../context/LanguageContext'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -19,12 +20,15 @@ import GlassCard from '../components/GlassCard'
 import Spinner from '../components/Spinner'
 import SubjectSwitcher from '../components/SubjectSwitcher'
 import { predictionSubjectMax } from '../lib/subjectMax'
+import { apiFetch, apiJsonBody } from '../lib/api'
+import { SUBJECT_KEYS, subjectLabel } from '../i18n'
 
-const SUBJECTS = ['Математическая грамотность', 'Грамотность чтения', 'История Казахстана']
+const SUBJECTS = SUBJECT_KEYS
 
 export default function Progress() {
   const { userId, authLoading } = useUser()
   const { subject, setSubject } = useSubject()
+  const { t, locale } = useTranslation()
   const navigate = useNavigate()
   const [progress, setProgress] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -41,47 +45,33 @@ export default function Progress() {
   const fetchDashboard = useCallback(async () => {
     if (!userId) return
     try {
-      const res = await fetch(`/api/dashboard/${userId}?subject=${encodeURIComponent(subject)}`)
+      const res = await apiFetch(`/api/dashboard/${userId}?subject=${encodeURIComponent(subject)}`, locale)
       if (res.ok) setDash(await res.json())
     } catch {
       /* ignore */
     }
-  }, [userId, subject])
+  }, [userId, subject, locale])
 
-  useEffect(() => {
-    if (authLoading) return
-    if (!userId) {
-      navigate('/login')
-      return
-    }
-    fetchProgress()
-  }, [authLoading, userId, navigate])
-
-  useEffect(() => {
+  const fetchProgress = useCallback(async () => {
     if (!userId) return
-    fetchDashboard()
-  }, [userId, subject, fetchDashboard])
-
-  const fetchProgress = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/progress/${userId}`)
+      const response = await apiFetch(`/api/progress/${userId}`, locale)
       const data = await response.json()
       setProgress(data)
-      await fetchPredictionsBySubject()
     } catch (error) {
       console.error('Error fetching progress:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId, locale])
 
-  const fetchPredictionsBySubject = async () => {
+  const fetchPredictionsBySubject = useCallback(async () => {
     if (!userId) return
     const entries = await Promise.all(
       SUBJECTS.map(async (subjectName) => {
         try {
-          const res = await fetch(`/api/prediction/${userId}?subject=${encodeURIComponent(subjectName)}`)
+          const res = await apiFetch(`/api/prediction/${userId}?subject=${encodeURIComponent(subjectName)}`, locale)
           if (!res.ok) return [subjectName, null]
           const data = await res.json()
           return [subjectName, data]
@@ -91,7 +81,26 @@ export default function Progress() {
       })
     )
     setSubjectPredictions(Object.fromEntries(entries))
-  }
+  }, [userId, locale])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!userId) {
+      navigate('/login')
+      return
+    }
+    fetchProgress()
+  }, [authLoading, userId, navigate, fetchProgress])
+
+  useEffect(() => {
+    if (!userId) return
+    fetchPredictionsBySubject()
+  }, [userId, fetchPredictionsBySubject])
+
+  useEffect(() => {
+    if (!userId) return
+    fetchDashboard()
+  }, [userId, subject, fetchDashboard])
 
   const scoreSummary = useMemo(() => {
     return SUBJECTS.map((name) => {
@@ -99,8 +108,9 @@ export default function Progress() {
       const pred = p?.predicted_score ?? 0
       const max = predictionSubjectMax(p, name)
       const on120 = Math.min(120, Math.round((pred / 20) * 120))
+      const label = subjectLabel(locale, name)
       return {
-        name: name.length > 14 ? `${name.slice(0, 12)}…` : name,
+        name: label.length > 14 ? `${label.slice(0, 12)}…` : label,
         fullName: name,
         predicted: pred,
         max,
@@ -108,7 +118,7 @@ export default function Progress() {
         confidence: Math.round((p?.confidence || 0) * 100),
       }
     })
-  }, [subjectPredictions])
+  }, [subjectPredictions, locale])
 
   const weakStrongBySubject = useMemo(() => {
     return SUBJECTS.map((sn) => {
@@ -144,7 +154,7 @@ export default function Progress() {
   }, [dash])
 
   useEffect(() => {
-    if (!progress) return
+    if (!progress || progress.total_questions === 0) return
     let cancelled = false
     const wrong = progress.wrong_questions?.length || 0
     const run = async () => {
@@ -154,19 +164,22 @@ export default function Progress() {
         const res = await fetch('/api/ai-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: `Кратко (2 предложения): совет по подготовке. Ошибок в базе: ${wrong}. Без выдуманных фактов.`,
-            context: {
-              question: 'Инсайт по прогрессу',
-              correct_answer: '',
-              user_answer: '',
+          body: apiJsonBody(
+            {
+              message: `Brief (2 sentences): study advice. Mistakes in history: ${wrong}. No invented facts.`,
+              context: {
+                question: t('progress.aiInsight'),
+                correct_answer: '',
+                user_answer: '',
+              },
             },
-          }),
+            locale
+          ),
         })
         const j = await res.json()
         if (!cancelled && res.ok) setAiInsight(j.reply || '')
       } catch {
-        if (!cancelled) setAiInsight('Чем больше целевых повторений слабых тем, тем стабильнее прогноз.')
+        if (!cancelled) setAiInsight(t('progress.aiFallback'))
       } finally {
         if (!cancelled) setAiLoading(false)
       }
@@ -175,7 +188,7 @@ export default function Progress() {
     return () => {
       cancelled = true
     }
-  }, [progress])
+  }, [progress?.total_questions, progress?.wrong_questions?.length, locale, t])
 
   const openChat = () => {
     setChatOpen(true)
@@ -184,7 +197,7 @@ export default function Progress() {
       setChatMessages([
         {
           role: 'ai',
-          text: 'Я помогу разобрать ошибки. Опиши, что хочешь улучшить.',
+          text: t('progress.chatIntro'),
         },
       ])
     }
@@ -192,10 +205,10 @@ export default function Progress() {
 
   const buildMistakesContext = () => {
     const wrong = progress?.wrong_questions || []
-    if (wrong.length === 0) return 'Ошибок пока нет.'
+    if (wrong.length === 0) return t('progress.noWrong')
     return wrong
       .slice(0, 12)
-      .map((q, idx) => `${idx + 1}) [${q.topic || 'Без темы'}] ${q.question_text} | верный: ${q.correct_answer}`)
+      .map((q, idx) => `${idx + 1}) [${q.topic || t('progress.noTopic')}] ${q.question_text} | ${q.correct_answer}`)
       .join('\n')
   }
 
@@ -213,22 +226,25 @@ export default function Progress() {
       const response = await fetch('/api/ai-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: messageWithContext,
-          context: {
-            question: 'Анализ ошибок пользователя',
-            correct_answer: '',
-            user_answer: '',
+        body: apiJsonBody(
+          {
+            message: messageWithContext,
+            context: {
+              question: t('progress.wrongReview'),
+              correct_answer: '',
+              user_answer: '',
+            },
           },
-        }),
+          locale
+        ),
       })
       if (!response.ok) throw new Error('Chat request failed')
 
       const data = await response.json()
-      setChatMessages((prev) => [...prev, { role: 'ai', text: data.reply || 'Не удалось получить ответ.' }])
+      setChatMessages((prev) => [...prev, { role: 'ai', text: data.reply || t('progress.chatNoReply') }])
     } catch (error) {
       console.error('AI chat error:', error)
-      setChatError('Ошибка отправки сообщения.')
+      setChatError(t('progress.chatSendError'))
     } finally {
       setChatLoading(false)
     }
@@ -240,7 +256,7 @@ export default function Progress() {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <Spinner />
-        <p className="text-sm text-[color:var(--app-muted)]">Загрузка аналитики…</p>
+        <p className="text-sm text-[color:var(--app-muted)]">{t('progress.loadingAnalytics')}</p>
       </div>
     )
   }
@@ -248,7 +264,7 @@ export default function Progress() {
   if (!progress) {
     return (
       <GlassCard className="p-10 text-center">
-        <p className="text-[color:var(--app-muted)]">Прогресс не найден</p>
+        <p className="text-[color:var(--app-muted)]">{t('progress.notFound')}</p>
       </GlassCard>
     )
   }
@@ -258,40 +274,38 @@ export default function Progress() {
   return (
     <div className="space-y-10">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-4xl font-extrabold text-[color:var(--app-fg)] md:text-5xl">Аналитика</h1>
-        <p className="mt-2 text-[color:var(--app-muted)]">Сводка попыток, предметы и AI-инсайты</p>
+        <h1 className="text-4xl font-extrabold text-[color:var(--app-fg)] md:text-5xl">{t('progress.analyticsTitle')}</h1>
+        <p className="mt-2 text-[color:var(--app-muted)]">{t('progress.analyticsSubtitle')}</p>
         <div className="mt-6 max-w-3xl">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--app-muted)]">Предмет для heatmap / streak на этой странице</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--app-muted)]">{t('progress.subjectHeatmapHint')}</p>
           <SubjectSwitcher value={subject} onChange={setSubject} />
         </div>
       </motion.div>
 
       {totalAttempts === 0 && (
         <GlassCard className="border border-violet-400/25 bg-violet-500/5 p-6 md:p-8">
-          <h2 className="text-lg font-bold text-[color:var(--app-fg)]">Пока нет ответов</h2>
-          <p className="mt-2 text-sm text-[color:var(--app-muted)]">
-            Пройди первый тест — здесь появятся точность, ошибки и графики по всем предметам. AI сможет дать персональный инсайт.
-          </p>
+          <h2 className="text-lg font-bold text-[color:var(--app-fg)]">{t('progress.noAnswersTitle')}</h2>
+          <p className="mt-2 text-sm text-[color:var(--app-muted)]">{t('progress.noAnswersDesc')}</p>
           <Link
             to="/test"
             className="mt-5 inline-flex rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg"
           >
-            Начать тренировку
+            {t('progress.startTraining')}
           </Link>
         </GlassCard>
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <GlassCard delay={0.05}>
-          <p className="text-sm text-[color:var(--app-muted)]">Всего ответов</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('progress.total')}</p>
           <p className="mt-2 text-4xl font-extrabold text-[color:var(--app-fg)]">{progress.total_questions}</p>
         </GlassCard>
         <GlassCard delay={0.08}>
-          <p className="text-sm text-[color:var(--app-muted)]">Верно</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('progress.correct')}</p>
           <p className="mt-2 text-4xl font-extrabold text-emerald-400">{progress.correct_answers}</p>
         </GlassCard>
         <GlassCard delay={0.11}>
-          <p className="text-sm text-[color:var(--app-muted)]">Точность</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{t('progress.accuracy')}</p>
           <p className="mt-2 text-4xl font-extrabold text-violet-400">{progress.percentage.toFixed(1)}%</p>
         </GlassCard>
       </div>
@@ -299,15 +313,14 @@ export default function Progress() {
       <GlassCard delay={0.12} className="p-6">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[color:var(--app-fg)]">🔥 Серия и уровень активности</h2>
+            <h2 className="text-lg font-bold text-[color:var(--app-fg)]">{t('progress.streakTitle')}</h2>
             <p className="text-sm text-[color:var(--app-muted)]">
-              Текущая серия: <span className="font-semibold text-orange-400">{streak.current}</span> · рекорд:{' '}
-              <span className="font-semibold">{streak.best}</span> {streak.badge}
+              {t('progress.streakCurrent', { current: streak.current, best: streak.best, badge: streak.badge || '' })}
             </p>
           </div>
         </div>
         <div className="mb-2 flex justify-between text-xs text-[color:var(--app-muted)]">
-          <span>Общий прогресс ответов</span>
+          <span>{t('progress.overallProgress')}</span>
           <span>
             {progress.correct_answers} / {progress.total_questions}
           </span>
@@ -324,7 +337,7 @@ export default function Progress() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <GlassCard delay={0.14} className="min-h-[300px] p-4 md:p-6">
-          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">Прогноз по предметам (шкала /120)</h3>
+          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">{t('progress.subjectScores')}</h3>
           <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={scoreSummary} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -338,7 +351,7 @@ export default function Progress() {
                     borderRadius: 12,
                     color: 'var(--app-fg)',
                   }}
-                  formatter={(v) => [`${v} / 120`, 'прогноз']}
+                  formatter={(v) => [`${v} / 120`, t('progress.forecastChart')]}
                 />
                 <Bar dataKey="on120" fill="url(#progGrad)" radius={[8, 8, 0, 0]} />
                 <defs>
@@ -353,7 +366,7 @@ export default function Progress() {
         </GlassCard>
 
         <GlassCard delay={0.16} className="min-h-[300px] p-4 md:p-6">
-          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">Активность за 28 дней</h3>
+          <h3 className="mb-4 text-lg font-bold text-[color:var(--app-fg)]">{t('progress.activity28')}</h3>
           <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={activitySeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -367,7 +380,7 @@ export default function Progress() {
                     borderRadius: 12,
                   }}
                 />
-                <Line type="monotone" dataKey="count" stroke="#a78bfa" strokeWidth={2} dot={false} name="ответов/день" />
+                <Line type="monotone" dataKey="count" stroke="#a78bfa" strokeWidth={2} dot={false} name={t('progress.answersPerDay')} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -375,16 +388,16 @@ export default function Progress() {
       </div>
 
       <GlassCard delay={0.18} className="p-6 md:p-8">
-        <h3 className="text-lg font-bold text-[color:var(--app-fg)]">AI insight</h3>
-        <p className="text-sm text-[color:var(--app-muted)]">На основе твоих данных</p>
+        <h3 className="text-lg font-bold text-[color:var(--app-fg)]">{t('progress.aiInsightTitle')}</h3>
+        <p className="text-sm text-[color:var(--app-muted)]">{t('progress.aiInsightSub')}</p>
         <div className="mt-4 min-h-[3rem] rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
-          {aiLoading && <p className="animate-pulse text-sm text-violet-300">Генерируем…</p>}
+          {aiLoading && <p className="animate-pulse text-sm text-violet-300">{t('progress.aiGenerating')}</p>}
           {!aiLoading && <p className="text-sm leading-relaxed text-[color:var(--app-fg)]">{aiInsight}</p>}
         </div>
       </GlassCard>
 
       <section>
-        <h2 className="mb-6 text-2xl font-bold text-[color:var(--app-fg)]">Сильные и слабые темы по предметам</h2>
+        <h2 className="mb-6 text-2xl font-bold text-[color:var(--app-fg)]">{t('progress.weakStrongTitle')}</h2>
         <div className="space-y-5">
           {SUBJECTS.map((subjectName, idx) => {
             const data = subjectPredictions[subjectName]
@@ -400,14 +413,14 @@ export default function Progress() {
               >
                 <GlassCard className="p-6">
                   <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h3 className="text-xl font-bold text-[color:var(--app-fg)]">{subjectName}</h3>
+                    <h3 className="text-xl font-bold text-[color:var(--app-fg)]">{subjectLabel(locale, subjectName)}</h3>
                     {hasSections && (
                       <span className="text-sm text-[color:var(--app-muted)]">
-                        Прогноз модели:{' '}
+                        {t('progress.modelForecast')}{' '}
                         <span className="font-semibold text-violet-400">
                           {data.predicted_score?.toFixed?.(1) ?? data.predicted_score} / {predictionSubjectMax(data, subjectName)}
                         </span>{' '}
-                        · уверенность {Math.round((data.confidence || 0) * 100)}%
+                        · {t('progress.confidence')} {Math.round((data.confidence || 0) * 100)}%
                       </span>
                     )}
                   </div>
@@ -415,18 +428,18 @@ export default function Progress() {
                   {ws && (
                     <div className="mb-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm">
-                        <span className="text-[color:var(--app-muted)]">Сильнее всего</span>
+                        <span className="text-[color:var(--app-muted)]">{t('progress.strongest')}</span>
                         <p className="font-semibold text-[color:var(--app-fg)]">{ws.strong}</p>
                       </div>
                       <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 px-4 py-3 text-sm">
-                        <span className="text-[color:var(--app-muted)]">Нужно подтянуть</span>
+                        <span className="text-[color:var(--app-muted)]">{t('progress.needsWork')}</span>
                         <p className="font-semibold text-[color:var(--app-fg)]">{ws.weak}</p>
                       </div>
                     </div>
                   )}
 
                   {!hasSections ? (
-                    <p className="text-[color:var(--app-muted)]">Мало данных по предмету — ответьте на вопросы в тренажёре.</p>
+                    <p className="text-[color:var(--app-muted)]">{t('progress.fewData')}</p>
                   ) : (
                     <div className="space-y-4">
                       {data.section_scores.map((section, sidx) => (
@@ -434,7 +447,7 @@ export default function Progress() {
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium text-[color:var(--app-fg)]">{section.section_name}</span>
                             <span className="text-xs text-[color:var(--app-muted)]">
-                              mastery {(section.mastery * 100).toFixed(0)}% · балл {section.score.toFixed(1)} / {section.weight}
+                              {t('progress.mastery')} {(section.mastery * 100).toFixed(0)}% · {t('progress.score')} {section.score.toFixed(1)} / {section.weight}
                             </span>
                           </div>
                           <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/10">
@@ -463,7 +476,7 @@ export default function Progress() {
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.06 }}
         className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 text-2xl text-white shadow-xl shadow-violet-500/40"
-        aria-label="AI чат по ошибкам"
+        aria-label={t('progress.chatAria')}
       >
         💬
       </motion.button>
@@ -480,9 +493,9 @@ export default function Progress() {
             className="glass-panel flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-[color:var(--app-border)]"
           >
             <div className="flex items-center justify-between border-b border-[color:var(--app-border)] px-5 py-4">
-              <h3 className="font-semibold text-[color:var(--app-fg)]">AI по ошибкам</h3>
+              <h3 className="font-semibold text-[color:var(--app-fg)]">{t('progress.chatTitle')}</h3>
               <button type="button" onClick={() => setChatOpen(false)} className="text-sm text-[color:var(--app-muted)]">
-                Закрыть
+                {t('progress.chatClose')}
               </button>
             </div>
             <div className="h-80 space-y-3 overflow-y-auto p-4">
@@ -502,7 +515,7 @@ export default function Progress() {
               {chatLoading && (
                 <div className="flex justify-start">
                   <div className="rounded-2xl border border-[color:var(--app-border)] px-4 py-2 text-sm text-[color:var(--app-muted)]">
-                    Печатает…
+                    {t('progress.chatTyping')}
                   </div>
                 </div>
               )}
@@ -520,7 +533,7 @@ export default function Progress() {
                       sendChatMessage()
                     }
                   }}
-                  placeholder="Вопрос про ошибки…"
+                  placeholder={t('progress.chatPlaceholder')}
                   className="flex-1 rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-card)] px-3 py-2 text-sm text-[color:var(--app-fg)]"
                 />
                 <button
@@ -529,7 +542,7 @@ export default function Progress() {
                   disabled={!chatInput.trim() || chatLoading}
                   className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  Отправить
+                  {t('progress.chatSend')}
                 </button>
               </div>
             </div>
